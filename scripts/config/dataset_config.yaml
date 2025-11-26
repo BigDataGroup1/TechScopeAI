@@ -1,0 +1,86 @@
+datasets:
+  competitive:
+    - name: global-startup-success
+      source: kaggle
+      dataset_id: hamnakaleemds/global-startup-success-dataset
+      required_columns: [company_name, sector, funding, status]
+      output_path: data/raw/competitive/global_startup_success.csv
+      
+    - name: startup-investments
+      source: kaggle
+      dataset_id: justinas/startup-investments
+      output_path: data/raw/competitive/startup_investments.csv
+      
+    - name: one-line-pitches
+      source: kaggle
+      dataset_id: pratyushpuri/startup-companies-one-line-pitches-2025
+      output_path: data/raw/competitive/one_line_pitches.csv
+
+  marketing:
+    - name: ads-creative-copy
+      source: huggingface
+      dataset_id: PeterBrendan/Ads_Creative_Ad_Copy_Programmatic
+      output_path: data/raw/marketing/ads_creative/
+      
+    - name: ad-image-net
+      source: huggingface
+      dataset_id: PeterBrendan/AdImageNet
+      output_path: data/raw/marketing/ad_image_net/
+      
+    - name: ad-ctr-data
+      source: mendeley
+      dataset_id: wrvjmdtjd9
+      output_path: data/raw/marketing/ad_ctr_data/
+
+  ip_legal:
+    - name: privacy-qa
+      source: github
+      repo: abhilasharavichander/PrivacyQA_EMNLP
+      output_path: data/raw/ip_legal/privacy_qa/
+      
+    - name: oss-policies
+      source: github
+      repo: github/government-open-source-policies
+      output_path: data/raw/ip_legal/oss_policies/
+      
+    - name: patent-guides
+      source: manual
+      urls: 
+        - https://www.uspto.gov/patents/basics/patent-process-overview
+        - https://www.wipo.int/patents/en/
+      output_path: data/raw/ip_legal/patent_guides/
+
+  policy:
+    - name: privacy-policy-historical
+      source: github
+      repo: CITP/privacy-policy-historical
+      output_path: data/raw/policy/privacy_historical/
+      
+    - name: privacy-compliance
+      source: github
+      repo: nlp-unibo/privacy-policies-compliance
+      output_path: data/raw/policy/privacy_compliance/
+      
+    - name: example-policies
+      source: github
+      repos: []
+      output_path: data/raw/policy/examples/
+
+  team:
+    - name: job-skill-set
+      source: kaggle
+      dataset_id: batuhanmutlu/job-skill-set
+      output_path: data/raw/team/job_skill_set.csv
+
+  pitch:
+    - name: pitch-examples
+      source: kaggle
+      dataset_id: pratyushpuri/startup-companies-one-line-pitches-2025
+      output_path: data/raw/pitch/pitch_examples.csv
+      
+    - name: pitch-templates
+      source: manual
+      urls:
+        - https://www.ycombinator.com/library/8F-how-to-pitch-your-startup
+      output_path: data/raw/pitch/templates/
+
