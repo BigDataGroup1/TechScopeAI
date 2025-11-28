@@ -15,6 +15,124 @@ datasets:
       source: kaggle
       dataset_id: pratyushpuri/startup-companies-one-line-pitches-2025
       output_path: data/raw/competitive/one_line_pitches.csv
+    
+    # Public datasets that don't require credentials
+    # Note: financial_phrasebank uses deprecated script format, using alternative
+    # - name: financial-news-sentiment
+    #   source: huggingface
+    #   dataset_id: financial_phrasebank
+    #   output_path: data/raw/competitive/financial_news/
+    
+    - name: business-news-headlines
+      source: huggingface
+      dataset_id: SetFit/bbc-news
+      output_path: data/raw/competitive/business_news/
+    
+    # Additional competitive/business datasets
+    - name: ag-news
+      source: huggingface
+      dataset_id: ag_news
+      output_path: data/raw/competitive/ag_news/
+    
+    # More verified competitive datasets
+    # Note: newsroom, xsum use deprecated script format - commented out
+    # - name: newsroom
+    #   source: huggingface
+    #   dataset_id: newsroom
+    #   output_path: data/raw/competitive/newsroom/
+    
+    - name: cnndailymail
+      source: huggingface
+      dataset_id: cnn_dailymail:3.0.0  # Fixed: Added version number
+      output_path: data/raw/competitive/cnndailymail/
+    
+    # - name: xsum
+    #   source: huggingface
+    #   dataset_id: xsum
+    #   output_path: data/raw/competitive/xsum/
+    
+    # Unstructured startup articles and content for RAG
+    - name: startup-wiki
+      source: manual
+      urls:
+        - https://www.ycombinator.com/library
+        - https://www.ycombinator.com/library/8F-how-to-pitch-your-startup
+        # Note: Other YC library URLs return 404 - keeping only working ones
+      output_path: data/raw/competitive/yc_library/
+    
+    # More verified text datasets for RAG
+    - name: squad-qa
+      source: huggingface
+      dataset_id: squad
+      output_path: data/raw/competitive/squad/
+    
+    # Note: newsqa uses deprecated script format - commented out
+    # - name: newsqa
+    #   source: huggingface
+    #   dataset_id: newsqa
+    #   output_path: data/raw/competitive/newsqa/
+    
+    - name: startup-blog-posts
+      source: manual
+      urls:
+        - https://blog.ycombinator.com/
+        - https://www.ycombinator.com/blog
+        - https://www.paulgraham.com/articles.html
+        - https://www.paulgraham.com/start.html
+      output_path: data/raw/competitive/startup_blogs/
+    
+    # New unstructured sources
+    - name: hacker-news-startups
+      source: hackernews
+      story_type: top  # top, new, or ask
+      limit: 1000
+      filter_startup: true
+      output_path: data/raw/competitive/hackernews/
+    
+    # Reddit - Optional (requires API credentials)
+    # To enable: Get credentials from https://www.reddit.com/prefs/apps
+    # and add to .env file: REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET
+    # - name: reddit-startups
+    #   source: reddit
+    #   subreddits: [startups, entrepreneur, SaaS]
+    #   limit: 1000
+    #   output_path: data/raw/competitive/reddit/
+    
+    - name: techcrunch-articles
+      source: rss
+      feed_urls:
+        - https://techcrunch.com/feed/
+      limit: 100
+      output_path: data/raw/competitive/techcrunch/
+    
+    - name: venturebeat-articles
+      source: rss
+      feed_urls:
+        - https://venturebeat.com/feed/
+      limit: 100
+      output_path: data/raw/competitive/venturebeat/
+    
+    # Product Hunt blocks scrapers (403 Forbidden) - commented out
+    # - name: product-hunt-launches
+    #   source: manual
+    #   urls:
+    #     - https://www.producthunt.com/
+    #   output_path: data/raw/competitive/producthunt/
+    
+    - name: indie-hackers-stories
+      source: manual
+      urls:
+        - https://www.indiehackers.com/
+      output_path: data/raw/competitive/indiehackers/
+    
+    # Additional news sources
+    - name: startup-news-rss
+      source: rss
+      feed_urls:
+        - https://feeds.feedburner.com/oreilly/radar
+        - https://feeds.feedburner.com/venturebeat/SGBF
+      limit: 50
+      output_path: data/raw/competitive/startup_news_rss/
 
   marketing:
     - name: ads-creative-copy
@@ -27,10 +145,27 @@ datasets:
       dataset_id: PeterBrendan/AdImageNet
       output_path: data/raw/marketing/ad_image_net/
       
-    - name: ad-ctr-data
-      source: mendeley
-      dataset_id: wrvjmdtjd9
-      output_path: data/raw/marketing/ad_ctr_data/
+    # Mendeley dataset returns 404 - commented out
+    # - name: ad-ctr-data
+    #   source: mendeley
+    #   dataset_id: wrvjmdtjd9
+    #   output_path: data/raw/marketing/ad_ctr_data/
+    
+    # Additional public marketing datasets
+    - name: imdb-reviews
+      source: huggingface
+      dataset_id: imdb
+      output_path: data/raw/marketing/imdb_reviews/
+    
+    - name: yelp-reviews
+      source: huggingface
+      dataset_id: yelp_review_full
+      output_path: data/raw/marketing/yelp_reviews/
+    
+    - name: amazon-reviews
+      source: huggingface
+      dataset_id: amazon_polarity
+      output_path: data/raw/marketing/amazon_reviews/
 
   ip_legal:
     - name: privacy-qa
@@ -71,6 +206,32 @@ datasets:
       source: kaggle
       dataset_id: batuhanmutlu/job-skill-set
       output_path: data/raw/team/job_skill_set.csv
+    
+    # Public datasets for team/hiring
+    # Note: StackOverflow dataset is very large (millions of questions) and may be deprecated
+    # You already have job postings data which is more relevant for startup hiring
+    # - name: stackoverflow-questions
+    #   source: huggingface
+    #   dataset_id: stackoverflow
+    #   output_path: data/raw/team/stackoverflow/
+    
+    # GitHub repos that don't exist - commented out
+    # - name: github-jobs
+    #   source: github
+    #   repo: github/gh-jobs
+    #   output_path: data/raw/team/github_jobs/
+    
+    # - name: hiring-guides
+    #   source: github
+    #   repo: doceme/hiring-guide
+    #   output_path: data/raw/team/hiring_guides/
+    
+    - name: startup-hiring-articles
+      source: manual
+      urls:
+        - https://blog.ycombinator.com/how-to-hire/
+        # Note: YC library URL returns 404 - using blog URL only
+      output_path: data/raw/team/hiring_articles/
 
   pitch:
     - name: pitch-examples
@@ -83,4 +244,49 @@ datasets:
       urls:
         - https://www.ycombinator.com/library/8F-how-to-pitch-your-startup
       output_path: data/raw/pitch/templates/
+    
+    # Additional pitch resources - unstructured content
+    # Note: Repo may not exist or be accessible - commented out
+    # - name: pitch-deck-examples
+    #   source: github
+    #   repo: jlevy/pitch-deck-examples
+    #   output_path: data/raw/pitch/pitch_deck_examples/
+    
+    - name: startup-blogs
+      source: manual
+      urls:
+        - https://blog.ycombinator.com/
+        - https://www.ycombinator.com/blog
+        - https://www.ycombinator.com/library
+      output_path: data/raw/pitch/startup_blogs/
+    
+    - name: entrepreneur-articles
+      source: manual
+      urls:
+        - https://www.entrepreneur.com/article
+        - https://www.forbes.com/entrepreneurs/
+      output_path: data/raw/pitch/entrepreneur_articles/
+    
+    # Additional pitch resources - unstructured content
+    - name: startup-failure-postmortems
+      source: manual
+      urls:
+        - https://www.failory.com/
+        - https://autopsy.io/
+      output_path: data/raw/pitch/failures/
+    
+    - name: investor-blogs
+      source: manual
+      urls:
+        - https://a16z.com/
+        - https://sequoiacap.com/
+        - https://www.firstround.com/review/
+      output_path: data/raw/pitch/investor_blogs/
+    
+    - name: podcast-transcripts
+      source: manual
+      urls:
+        - https://www.npr.org/podcasts/510313/how-i-built-this
+        - https://www.startupschool.org/
+      output_path: data/raw/pitch/podcasts/
 

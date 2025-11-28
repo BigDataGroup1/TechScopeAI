@@ -21,7 +21,8 @@ class KaggleDownloader:
             kaggle_key: Kaggle API key (or from KAGGLE_KEY env var)
         """
         self.username = kaggle_username or os.getenv("KAGGLE_USERNAME")
-        self.key = kaggle_key or os.getenv("KAGGLE_KEY")
+        # Check for KAGGLE_KEY or KAGGLE_API_TOKEN (both are valid)
+        self.key = kaggle_key or os.getenv("KAGGLE_KEY") or os.getenv("KAGGLE_API_TOKEN")
         
         # Check for kaggle.json in ~/.kaggle/
         kaggle_config = Path.home() / ".kaggle" / "kaggle.json"

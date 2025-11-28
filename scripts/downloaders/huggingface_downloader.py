@@ -54,12 +54,22 @@ class HuggingFaceDownloader:
             
             # Try to load dataset - handle gated datasets
             try:
-                # Use token if available
-                dataset = load_dataset(
-                    dataset_id, 
-                    cache_dir=self.cache_dir,
-                    token=self.token
-                )
+                # Handle dataset with config version (e.g., "dataset_name:3.0.0")
+                if ':' in dataset_id:
+                    dataset_name, config_name = dataset_id.split(':', 1)
+                    dataset = load_dataset(
+                        dataset_name,
+                        config_name,
+                        cache_dir=self.cache_dir,
+                        token=self.token
+                    )
+                else:
+                    # Use token if available
+                    dataset = load_dataset(
+                        dataset_id, 
+                        cache_dir=self.cache_dir,
+                        token=self.token
+                    )
             except Exception as e:
                 error_msg = str(e).lower()
                 if "gated" in error_msg or "authentication" in error_msg or "401" in str(e):
