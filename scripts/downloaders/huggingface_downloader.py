@@ -64,12 +64,12 @@ class HuggingFaceDownloader:
                         token=self.token
                     )
                 else:
-                    # Use token if available
-                    dataset = load_dataset(
-                        dataset_id, 
-                        cache_dir=self.cache_dir,
-                        token=self.token
-                    )
+                # Use token if available
+                dataset = load_dataset(
+                    dataset_id, 
+                    cache_dir=self.cache_dir,
+                    token=self.token
+                )
             except Exception as e:
                 error_msg = str(e).lower()
                 if "gated" in error_msg or "authentication" in error_msg or "401" in str(e):
