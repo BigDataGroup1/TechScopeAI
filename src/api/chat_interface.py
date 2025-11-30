@@ -108,6 +108,8 @@ def main():
         st.session_state.slides = None
     if 'current_slide' not in st.session_state:
         st.session_state.current_slide = 0
+    if 'elevator_pitch' not in st.session_state:
+        st.session_state.elevator_pitch = None
     
     # Load agent
     agent, error = load_pitch_agent()
@@ -309,30 +311,45 @@ def main():
             slide = slides_list[st.session_state.current_slide]
             st.markdown("---")
             with st.container():
-                st.markdown(f"### 📊 Slide {slide.get('slide_number', '?')}: {slide.get('title', 'Untitled')}")
+                # Create two columns: content on left, image on right
+                col_content, col_image = st.columns([2, 1])
                 
-                # Main content
-                if slide.get('content'):
-                    st.markdown("**Content:**")
-                    st.markdown(slide.get('content', ''))
+                with col_content:
+                    st.markdown(f"### 📊 Slide {slide.get('slide_number', '?')}: {slide.get('title', 'Untitled')}")
+                    
+                    # Main content
+                    if slide.get('content'):
+                        st.markdown("**Content:**")
+                        st.markdown(slide.get('content', ''))
+                    
+                    if slide.get('key_points'):
+                        st.markdown("**Key Points:**")
+                        for point in slide['key_points']:
+                            st.markdown(f"- {point}")
                 
-                if slide.get('key_points'):
-                    st.markdown("**Key Points:**")
-                    for point in slide['key_points']:
-                        st.markdown(f"- {point}")
+                with col_image:
+                    # Display image if available
+                    image_path = slide.get('image_path')
+                    if image_path and Path(image_path).exists():
+                        try:
+                            from PIL import Image
+                            img = Image.open(image_path)
+                            st.image(img, caption=slide.get('title', 'Slide Image'), use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"Could not display image: {e}")
+                    else:
+                        st.info("🖼️ No image available for this slide")
                 
-                # Speech section
+                # Speech section (in expander - not in PPT)
                 if slide.get('speech'):
-                    st.markdown("---")
-                    st.markdown("### 💬 Speech Script")
-                    st.info(slide.get('speech', ''))
+                    with st.expander("💬 Speech Script (Not in PPT - for reference only)"):
+                        st.info(slide.get('speech', ''))
                 
-                # Talking points section
+                # Talking points section (in expander - not in PPT)
                 if slide.get('talking_points'):
-                    st.markdown("---")
-                    st.markdown("### 🎯 Talking Points")
-                    for point in slide.get('talking_points', []):
-                        st.markdown(f"→ **{point}**")
+                    with st.expander("🎯 Talking Points (Not in PPT - for reference only)"):
+                        for point in slide.get('talking_points', []):
+                            st.markdown(f"→ **{point}**")
         
         # Slide thumbnails
         st.markdown("---")
@@ -344,6 +361,38 @@ def main():
                 if st.button(f"Slide {idx + 1}\n{slide.get('title', '')[:20]}...", key=f"slide_btn_{idx}"):
                     st.session_state.current_slide = idx
                     st.rerun()
+    
+    # Elevator Pitch Section (independent of slides)
+    if st.session_state.get('elevator_pitch'):
+        st.markdown("---")
+        st.subheader("🎤 Elevator Pitch")
+        
+        pitch_data = st.session_state.elevator_pitch
+        col_pitch1, col_pitch2 = st.columns([3, 1])
+        
+        with col_pitch1:
+            st.markdown(f"**Duration:** {pitch_data.get('duration_seconds', 60)} seconds")
+            st.markdown(f"**Words:** ~{pitch_data.get('estimated_words', 0)} words")
+            
+            # Display pitch in a nice box
+            st.markdown("### Your Elevator Pitch:")
+            st.info(pitch_data.get('elevator_pitch', ''))
+            
+            # Also show in code block for easy copying
+            st.markdown("### Copy Text:")
+            st.code(pitch_data.get('elevator_pitch', ''), language=None)
+        
+        with col_pitch2:
+            # Copy button info
+            st.markdown("### Export")
+            pitch_text = pitch_data.get('elevator_pitch', '')
+            st.download_button(
+                "💾 Download as TXT",
+                pitch_text,
+                file_name=f"{pitch_data.get('company_name', 'Company')}_ElevatorPitch.txt",
+                mime="text/plain"
+            )
+            st.caption("💡 Tip: Click the code block above and copy to clipboard")
     
     # Quick actions
     st.markdown("---")
@@ -394,6 +443,30 @@ def main():
                 st.warning("Please enter company details first!")
     
     with col3:
+        if st.button("🎤 Generate Elevator Pitch"):
+            if st.session_state.company_data:
+                with st.spinner("Crafting your elevator pitch..."):
+                    try:
+                        # Generate 60-second elevator pitch
+                        pitch_result = agent.generate_elevator_pitch(
+                            st.session_state.company_data,
+                            duration_seconds=60
+                        )
+                        if pitch_result and pitch_result.get('elevator_pitch'):
+                            st.session_state.elevator_pitch = pitch_result
+                            st.success("✅ Elevator pitch generated!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to generate elevator pitch. Please try again.")
+                            logger.error(f"Elevator pitch generation returned empty result: {pitch_result}")
+                    except Exception as e:
+                        error_msg = f"Error generating elevator pitch: {str(e)}"
+                        st.error(error_msg)
+                        logger.error(f"Elevator pitch generation error: {e}", exc_info=True)
+            else:
+                st.warning("Please enter company details first!")
+    
+    with col4:
         if st.button("📊 Evaluate Pitch"):
             st.info("Paste your pitch in chat: 'evaluate: [your pitch]'")
     

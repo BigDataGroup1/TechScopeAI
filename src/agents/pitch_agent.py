@@ -243,9 +243,7 @@ Return ONLY a valid JSON object with this structure:
       "slide_number": 1,
       "title": "Slide Title",
       "content": "Main content for this slide (2-4 bullet points or short paragraphs)",
-      "key_points": ["Point 1", "Point 2", "Point 3"],
-      "speech": "A natural, conversational speech script (2-3 sentences) for presenting this slide. Make it sound like you're talking to investors, not reading. Include transitions and emphasis.",
-      "talking_points": ["Key talking point 1 - what to emphasize", "Key talking point 2 - what to emphasize", "Key talking point 3 - what to emphasize"]
+      "key_points": ["Point 1", "Point 2", "Point 3"]
     }}
   ],
   "total_slides": 13
@@ -254,13 +252,10 @@ Return ONLY a valid JSON object with this structure:
 IMPORTANT:
 - Make each slide concise (50-100 words), data-driven, and compelling
 - Include specific numbers and metrics where available
-- Speech should be natural, conversational, and engaging (2-3 sentences per slide)
-- Talking points should be 3-5 bullet points of what to emphasize when presenting
-- Speech should flow naturally from one slide to the next with transitions"""
+- Focus on clear, impactful content for presentation slides"""
         
-        system_prompt = """You are an expert pitch deck creator and presentation coach. Generate structured slides in JSON format.
-Each slide should be clear, concise, and investor-focused. Include natural speech scripts and talking points for effective presentation.
-Use the company details to personalize every slide. Make the speech sound conversational and engaging, not robotic."""
+        system_prompt = """You are an expert pitch deck creator. Generate structured slides in JSON format.
+Each slide should be clear, concise, and investor-focused. Use the company details to personalize every slide."""
         
         # Generate response
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
@@ -289,7 +284,39 @@ Use the company details to personalize every slide. Make the speech sound conver
                 "sources": all_sources
             }
             
-            # Ensure all slides have speech and talking_points
+            # Fetch images for each slide and store in slide data
+            try:
+                from ..utils.image_fetcher import ImageFetcher
+                image_fetcher = ImageFetcher()
+                
+                logger.info("Fetching images for slides...")
+                for slide in slides_result["slides"]:
+                    slide_title = slide.get('title', '')
+                    slide_content = slide.get('content', '')
+                    
+                    try:
+                        # Get keywords for image search
+                        keywords = image_fetcher.get_slide_keywords(slide_title, slide_content)
+                        
+                        # Fetch image
+                        image_path = image_fetcher.get_image_for_slide(slide_title, slide_content, keywords)
+                        
+                        if image_path and Path(image_path).exists():
+                            # Store absolute path for use in PPT and web
+                            slide["image_path"] = str(Path(image_path).absolute())
+                            logger.info(f"✅ Image fetched for slide: {slide_title}")
+                        else:
+                            slide["image_path"] = None
+                    except Exception as e:
+                        logger.warning(f"Could not fetch image for slide {slide.get('title', '')}: {e}")
+                        slide["image_path"] = None
+            except Exception as e:
+                logger.warning(f"Image fetcher not available: {e}")
+                # Set image_path to None for all slides
+                for slide in slides_result["slides"]:
+                    slide["image_path"] = None
+            
+            # Keep speech and talking_points for UI reference (not in PPT)
             for slide in slides_result["slides"]:
                 if "speech" not in slide:
                     slide["speech"] = f"Presenting: {slide.get('title', '')}. {slide.get('content', '')}"
@@ -342,6 +369,96 @@ Use the company details to personalize every slide. Make the speech sound conver
             "sources": [],
             "note": "Generated fallback slides - original response parsing failed"
         }
+    
+    def generate_elevator_pitch(self, company_details: Dict, duration_seconds: int = 60) -> Dict:
+        """
+        Generate an elevator pitch speech (30-60 seconds).
+        
+        Args:
+            company_details: Full company information dictionary
+            duration_seconds: Target duration (30, 45, or 60 seconds)
+            
+        Returns:
+            Dictionary with elevator pitch text and metadata
+        """
+        logger.info(f"Generating {duration_seconds}s elevator pitch for: {company_details.get('company_name', 'Unknown')}")
+        
+        # Retrieve successful pitch examples
+        pitch_examples = self.retrieve_context(
+            f"{company_details.get('industry', '')} elevator pitch startup pitch speech",
+            top_k=5
+        )
+        
+        # Calculate target word count (average speaking rate: 150 words/minute = 2.5 words/second)
+        words_per_second = 2.5
+        target_words = int(duration_seconds * words_per_second)
+        
+        prompt = f"""Create a compelling elevator pitch for this startup:
+
+COMPANY DETAILS:
+{json.dumps(company_details, indent=2)}
+
+SUCCESSFUL PITCH EXAMPLES:
+{pitch_examples.get('context', '')}
+
+TASK: Write an elevator pitch that:
+- Is exactly {duration_seconds} seconds when spoken (approximately {target_words} words)
+- Starts with a hook that grabs attention
+- Clearly states the problem you're solving
+- Explains your solution in simple terms
+- Highlights your unique value proposition
+- Mentions key traction or metrics (if available)
+- Ends with a clear call to action or ask
+- Sounds natural and conversational (not robotic)
+- Can be delivered confidently in one breath
+
+Return ONLY the elevator pitch text, nothing else. Make it compelling and memorable."""
+
+        system_prompt = """You are an expert at crafting elevator pitches. Create compelling, 
+natural-sounding pitches that investors remember. The pitch should flow smoothly and be 
+deliverable with confidence."""
+
+        try:
+            pitch_text = self.generate_response(prompt, system_prompt=system_prompt)
+            
+            if not pitch_text or len(pitch_text.strip()) == 0:
+                logger.warning("Empty response from LLM for elevator pitch")
+                # Fallback pitch
+                pitch_text = f"""Hi, I'm {company_details.get('company_name', 'we')}. We solve {company_details.get('problem', 'a critical problem')} by {company_details.get('solution', 'providing an innovative solution')}. Our unique approach {company_details.get('competitive_advantage', 'sets us apart')}. We're looking for {company_details.get('funding_amount', 'support')} to {company_details.get('use_of_funds', 'scale our business')}."""
+            
+            # Clean up the response (remove quotes if wrapped)
+            pitch_text = pitch_text.strip()
+            if pitch_text.startswith('"') and pitch_text.endswith('"'):
+                pitch_text = pitch_text[1:-1]
+            if pitch_text.startswith("'") and pitch_text.endswith("'"):
+                pitch_text = pitch_text[1:-1]
+            
+            # Remove markdown code blocks if present
+            if pitch_text.startswith("```"):
+                lines = pitch_text.split("\n")
+                pitch_text = "\n".join(lines[1:-1]) if len(lines) > 2 else pitch_text
+            
+            logger.info(f"Generated elevator pitch: {len(pitch_text)} characters")
+            
+            return {
+                "elevator_pitch": pitch_text,
+                "duration_seconds": duration_seconds,
+                "estimated_words": len(pitch_text.split()),
+                "company_name": company_details.get('company_name', 'Unknown'),
+                "sources": pitch_examples.get('sources', [])
+            }
+        except Exception as e:
+            logger.error(f"Error generating elevator pitch: {e}", exc_info=True)
+            # Return fallback pitch
+            fallback_pitch = f"""Hi, I'm {company_details.get('company_name', 'we')}. We solve {company_details.get('problem', 'a critical problem')} by {company_details.get('solution', 'providing an innovative solution')}. Our unique approach {company_details.get('competitive_advantage', 'sets us apart')}. We're looking for {company_details.get('funding_amount', 'support')} to {company_details.get('use_of_funds', 'scale our business')}."""
+            return {
+                "elevator_pitch": fallback_pitch,
+                "duration_seconds": duration_seconds,
+                "estimated_words": len(fallback_pitch.split()),
+                "company_name": company_details.get('company_name', 'Unknown'),
+                "sources": [],
+                "error": str(e)
+            }
     
     def evaluate_pitch_with_scores(self, pitch_text: str, company_context: Optional[Dict] = None) -> Dict:
         """

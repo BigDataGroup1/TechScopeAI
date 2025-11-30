@@ -238,24 +238,28 @@ class PitchExporter:
             date_para.font.color.rgb = RGBColor(148, 163, 184)  # Medium gray
             date_para.alignment = PP_ALIGN.CENTER
             
-            # Premium content slides with speech and talking points
+            # Premium content slides (no speech/talking points in PPT)
             for slide_data in slides:
                 slide = prs.slides.add_slide(blank_layout)
                 
                 slide_title = slide_data.get('title', 'Untitled')
                 slide_content = slide_data.get('content', '')
                 key_points = slide_data.get('key_points', [])
-                speech = slide_data.get('speech', '')
-                talking_points = slide_data.get('talking_points', [])
                 
-                # Try to get image for this slide
-                image_path = None
-                if include_images and image_fetcher:
+                # Try to get image - first check if already stored in slide data
+                image_path = slide_data.get('image_path')
+                
+                # If not stored, try to fetch it
+                if not image_path and include_images and image_fetcher:
                     try:
                         keywords = image_fetcher.get_slide_keywords(slide_title, slide_content)
                         image_path = image_fetcher.get_image_for_slide(slide_title, slide_content, keywords)
                     except Exception as e:
                         logger.warning(f"Could not fetch image: {e}")
+                
+                # Verify image exists
+                if image_path and not Path(image_path).exists():
+                    image_path = None
                 
                 # Premium header with gradient effect
                 left = Inches(0)
@@ -305,11 +309,11 @@ class PitchExporter:
                 title_para.font.bold = True
                 title_para.font.color.rgb = white
                 
-                # Main content area (left side)
+                # Main content area (larger now, no speech/talking points)
                 left_content = Inches(0.5)
                 top_content = Inches(1.6)
                 width_content = Inches(4.8) if image_path else Inches(9)
-                height_content = Inches(2.8)
+                height_content = Inches(5.5)  # Increased height since no speech/talking points
                 content_box = slide.shapes.add_textbox(left_content, top_content, width_content, height_content)
                 content_frame = content_box.text_frame
                 content_frame.word_wrap = True
@@ -318,7 +322,7 @@ class PitchExporter:
                 if slide_content:
                     p = content_frame.paragraphs[0]
                     p.text = slide_content
-                    p.font.size = Pt(16)
+                    p.font.size = Pt(18)  # Slightly larger since more space
                     p.font.color.rgb = text_color
                     p.space_after = Pt(14)
                     p.line_spacing = 1.2
@@ -332,90 +336,11 @@ class PitchExporter:
                             p = content_frame.add_paragraph()
                         p.text = f"• {point}"
                         p.level = 0
-                        p.font.size = Pt(15)
+                        p.font.size = Pt(16)  # Slightly larger
                         p.font.color.rgb = text_color
                         p.space_after = Pt(10)
                         p.space_before = Pt(6)
                         p.line_spacing = 1.3
-                
-                # Speech section - highlighted box
-                if speech:
-                    left_speech = Inches(0.5)
-                    top_speech = Inches(4.6)
-                    width_speech = Inches(4.8) if image_path else Inches(9)
-                    height_speech = Inches(1.2)
-                    
-                    # Speech background box
-                    speech_bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left_speech, top_speech, width_speech, height_speech)
-                    speech_bg.fill.solid()
-                    speech_bg.fill.fore_color.rgb = light_bg
-                    speech_bg.line.color.rgb = accent_color
-                    speech_bg.line.width = Pt(2)
-                    
-                    # Speech label
-                    speech_label_box = slide.shapes.add_textbox(left_speech + Inches(0.1), top_speech + Inches(0.05), 
-                                                               Inches(1.5), Inches(0.25))
-                    speech_label_frame = speech_label_box.text_frame
-                    speech_label_frame.text = "💬 SPEECH"
-                    speech_label_para = speech_label_frame.paragraphs[0]
-                    speech_label_para.font.size = Pt(11)
-                    speech_label_para.font.bold = True
-                    speech_label_para.font.color.rgb = accent_color
-                    
-                    # Speech content
-                    speech_content_box = slide.shapes.add_textbox(left_speech + Inches(0.15), top_speech + Inches(0.3), 
-                                                                  width_speech - Inches(0.3), height_speech - Inches(0.35))
-                    speech_content_frame = speech_content_box.text_frame
-                    speech_content_frame.word_wrap = True
-                    speech_content_frame.text = speech
-                    speech_para = speech_content_frame.paragraphs[0]
-                    speech_para.font.size = Pt(13)
-                    speech_para.font.color.rgb = text_color
-                    speech_para.font.italic = True
-                    speech_para.space_after = Pt(6)
-                    speech_para.line_spacing = 1.25
-                
-                # Talking points section
-                if talking_points:
-                    left_talk = Inches(0.5)
-                    top_talk = Inches(6)
-                    width_talk = Inches(4.8) if image_path else Inches(9)
-                    height_talk = Inches(1.3)
-                    
-                    # Talking points background
-                    talk_bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left_talk, top_talk, width_talk, height_talk)
-                    talk_bg.fill.solid()
-                    talk_bg.fill.fore_color.rgb = RGBColor(239, 246, 255)  # Very light blue
-                    talk_bg.line.color.rgb = primary_color
-                    talk_bg.line.width = Pt(1.5)
-                    
-                    # Talking points label
-                    talk_label_box = slide.shapes.add_textbox(left_talk + Inches(0.1), top_talk + Inches(0.05), 
-                                                             Inches(2), Inches(0.25))
-                    talk_label_frame = talk_label_box.text_frame
-                    talk_label_frame.text = "🎯 TALKING POINTS"
-                    talk_label_para = talk_label_frame.paragraphs[0]
-                    talk_label_para.font.size = Pt(11)
-                    talk_label_para.font.bold = True
-                    talk_label_para.font.color.rgb = primary_color
-                    
-                    # Talking points content
-                    talk_content_box = slide.shapes.add_textbox(left_talk + Inches(0.15), top_talk + Inches(0.3), 
-                                                                width_talk - Inches(0.3), height_talk - Inches(0.35))
-                    talk_content_frame = talk_content_box.text_frame
-                    talk_content_frame.word_wrap = True
-                    
-                    for i, point in enumerate(talking_points[:4]):  # Limit to 4 points
-                        if i == 0:
-                            p = talk_content_frame.paragraphs[0]
-                        else:
-                            p = talk_content_frame.add_paragraph()
-                        p.text = f"→ {point}"
-                        p.level = 0
-                        p.font.size = Pt(12)
-                        p.font.color.rgb = text_color
-                        p.space_after = Pt(5)
-                        p.space_before = Pt(3)
                 
                 # Add image if available (right side, better positioned)
                 if image_path and Path(image_path).exists():
