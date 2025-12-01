@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.rag.embedder import Embedder
-from src.rag.vector_store import VectorStore
+from src.rag.weaviate_store import WeaviateStore
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,13 @@ def build_index(category: str, processed_data_path: Path, batch_size: int = 32):
     embedder = Embedder(use_openai=False)  # Use free embeddings
     dimension = embedder.get_embedding_dimension()
     
-    # Initialize vector store
-    logger.info(f"Initializing vector store (dimension: {dimension})...")
-    vector_store = VectorStore(category=category, dimension=dimension)
+    # Initialize vector store (Weaviate only, required)
+    logger.info(f"Initializing Weaviate vector store (dimension: {dimension})...")
+    vector_store = WeaviateStore(
+        category=category,
+        dimension=dimension
+    )
+    logger.info("✅ Using WeaviateStore (Weaviate only, no fallback)")
     
     # Extract texts and metadata
     texts = [chunk['content'] for chunk in chunks]

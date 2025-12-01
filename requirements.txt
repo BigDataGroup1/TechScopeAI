@@ -19,7 +19,8 @@ python-dotenv>=1.0.0  # Environment variables
 
 # RAG & Vector Database
 sentence-transformers>=2.2.0  # FREE embeddings
-faiss-cpu>=1.7.4  # Vector database (local, free)
+faiss-cpu>=1.7.4  # Vector database (local, free - fallback)
+weaviate-client>=4.0.0  # Weaviate vector database (primary)
 langchain>=0.1.0  # RAG framework
 langchain-openai>=0.0.5  # OpenAI integration for LangChain
 langchain-community>=0.0.20  # Community integrations

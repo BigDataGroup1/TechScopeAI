@@ -44,7 +44,16 @@ def load_pitch_agent():
         
         # Initialize RAG components
         embedder = Embedder(use_openai=False)  # Use free embeddings
-        vector_store = VectorStore(category="pitch", dimension=embedder.get_embedding_dimension())
+        dimension = embedder.get_embedding_dimension()
+        
+        # Use Weaviate only (required)
+        from src.rag.weaviate_store import WeaviateStore
+        vector_store = WeaviateStore(
+            category="pitch", 
+            dimension=dimension
+        )
+        logger.info("Using WeaviateStore for pitch category")
+        
         retriever = Retriever(vector_store, embedder)
         
         # Initialize agent
@@ -65,7 +74,16 @@ def load_competitive_agent():
         
         # Initialize RAG components for competitive analysis
         embedder = Embedder(use_openai=False)
-        vector_store = VectorStore(category="competitive", dimension=embedder.get_embedding_dimension())
+        dimension = embedder.get_embedding_dimension()
+        
+        # Use Weaviate only (required)
+        from src.rag.weaviate_store import WeaviateStore
+        vector_store = WeaviateStore(
+            category="competitive", 
+            dimension=dimension
+        )
+        logger.info("Using WeaviateStore for competitive category")
+        
         retriever = Retriever(vector_store, embedder)
         
         # Initialize agent
