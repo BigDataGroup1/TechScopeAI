@@ -13,6 +13,87 @@ logger = logging.getLogger(__name__)
 class CompetitiveAgent(BaseAgent):
     """Agent specialized in competitive analysis and market positioning."""
     
+    COMPETITIVE_QUESTIONNAIRE = [
+        {
+            "id": "company_name",
+            "question": "🏢 What is your company name?",
+            "type": "text",
+            "required": True,
+            "placeholder": "e.g., TechFlow Solutions Inc."
+        },
+        {
+            "id": "industry",
+            "question": "🏭 What industry does your company operate in?",
+            "type": "text",
+            "required": True,
+            "placeholder": "e.g., AI/ML, SaaS, Healthcare, Fintech..."
+        },
+        {
+            "id": "solution",
+            "question": "💡 What is your product or service?",
+            "type": "textarea",
+            "required": True,
+            "placeholder": "Describe your solution..."
+        },
+        {
+            "id": "target_market",
+            "question": "🎯 Who is your target market?",
+            "type": "text",
+            "required": True,
+            "placeholder": "e.g., Small businesses, Enterprise, Consumers..."
+        },
+        {
+            "id": "known_competitors",
+            "question": "🔍 Do you know who your main competitors are?",
+            "type": "select",
+            "options": ["Yes, I know them", "Somewhat, but not sure", "No, need help identifying"],
+            "required": True
+        },
+        {
+            "id": "competitor_names",
+            "question": "📋 If yes, please list your main competitors:",
+            "type": "textarea",
+            "required": False,
+            "depends_on": {"known_competitors": "Yes, I know them"},
+            "placeholder": "List competitor names, one per line..."
+        },
+        {
+            "id": "differentiation",
+            "question": "🏆 How do you differentiate from competitors?",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "What makes you different or better..."
+        },
+        {
+            "id": "market_position",
+            "question": "📍 How would you describe your market position?",
+            "type": "select",
+            "options": [
+                "Market leader",
+                "Strong challenger",
+                "Niche player",
+                "New entrant",
+                "Not sure"
+            ],
+            "required": True
+        },
+        {
+            "id": "competitive_concerns",
+            "question": "⚠️ What are your main competitive concerns?",
+            "type": "multiselect",
+            "options": [
+                "Price competition",
+                "Feature parity",
+                "Market saturation",
+                "Large incumbents",
+                "New entrants",
+                "Customer acquisition",
+                "Other"
+            ],
+            "required": False
+        }
+    ]
+    
     def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
         """
         Initialize Competitive Agent.

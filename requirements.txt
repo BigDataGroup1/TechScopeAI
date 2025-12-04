@@ -20,7 +20,7 @@ python-dotenv>=1.0.0  # Environment variables
 # RAG & Vector Database
 sentence-transformers>=2.2.0  # FREE embeddings
 faiss-cpu>=1.7.4  # Vector database (local, free - fallback)
-weaviate-client>=4.0.0  # Weaviate vector database (primary)
+weaviate-client[agents]>=4.0.0  # Weaviate with QueryAgent support
 langchain>=0.1.0  # RAG framework
 langchain-openai>=0.0.5  # OpenAI integration for LangChain
 langchain-community>=0.0.20  # Community integrations
@@ -38,6 +38,7 @@ streamlit-chat>=0.1.1  # Chat components
 
 # Utilities
 tiktoken>=0.5.0  # Token counting
+ddgs>=0.1.0  # Web search (free, no API key needed) - renamed from duckduckgo-search
 
 # Export Dependencies
 reportlab>=4.0.0  # PDF export

@@ -7,7 +7,16 @@ from .retriever import Retriever
 # Try to export WeaviateStore if available
 try:
     from .weaviate_store import WeaviateStore
-    __all__ = ["Embedder", "VectorStore", "WeaviateStore", "Retriever"]
+    exports = ["Embedder", "VectorStore", "WeaviateStore", "Retriever"]
 except ImportError:
-    __all__ = ["Embedder", "VectorStore", "Retriever"]
+    exports = ["Embedder", "VectorStore", "Retriever"]
+
+# Try to export QueryAgentRetriever if available
+try:
+    from .query_agent_retriever import QueryAgentRetriever
+    exports.append("QueryAgentRetriever")
+except ImportError:
+    pass
+
+__all__ = exports
 

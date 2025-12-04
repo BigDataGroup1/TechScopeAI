@@ -14,6 +14,79 @@ logger = logging.getLogger(__name__)
 class PitchAgent(BaseAgent):
     """Agent specialized in pitch deck generation and evaluation."""
     
+    PITCH_QUESTIONNAIRE = [
+        {
+            "id": "company_name",
+            "question": "🏢 What is your company name?",
+            "type": "text",
+            "required": True,
+            "placeholder": "e.g., TechFlow Solutions Inc."
+        },
+        {
+            "id": "industry",
+            "question": "🏭 What industry does your company operate in?",
+            "type": "text",
+            "required": True,
+            "placeholder": "e.g., AI/ML, SaaS, Healthcare, Fintech..."
+        },
+        {
+            "id": "problem",
+            "question": "❓ What problem are you solving?",
+            "type": "textarea",
+            "required": True,
+            "placeholder": "Describe the problem your startup addresses..."
+        },
+        {
+            "id": "solution",
+            "question": "💡 What is your solution?",
+            "type": "textarea",
+            "required": True,
+            "placeholder": "Describe your product or service solution..."
+        },
+        {
+            "id": "target_market",
+            "question": "🎯 Who is your target market?",
+            "type": "text",
+            "required": True,
+            "placeholder": "e.g., Small businesses, Enterprise, Consumers..."
+        },
+        {
+            "id": "current_stage",
+            "question": "🚀 What is your current funding stage?",
+            "type": "select",
+            "options": ["Pre-Seed", "Seed", "Series A", "Series B", "Series C+"],
+            "required": True
+        },
+        {
+            "id": "traction",
+            "question": "📈 What traction do you have? (users, revenue, partnerships, etc.)",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "Describe your key metrics, milestones, or achievements..."
+        },
+        {
+            "id": "funding_goal",
+            "question": "💰 What is your funding goal?",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $500K seed round, $2M Series A..."
+        },
+        {
+            "id": "team",
+            "question": "👥 Tell us about your team (founders, key members)",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "Brief description of founders and key team members..."
+        },
+        {
+            "id": "competitive_advantage",
+            "question": "🏆 What is your competitive advantage?",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "What makes you different from competitors..."
+        }
+    ]
+    
     def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
         """
         Initialize Pitch Agent.

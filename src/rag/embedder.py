@@ -2,6 +2,10 @@
 
 import logging
 import os
+
+# Fix tokenizers parallelism warning - MUST be set before importing sentence_transformers
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 from typing import List, Optional
 import numpy as np
 
