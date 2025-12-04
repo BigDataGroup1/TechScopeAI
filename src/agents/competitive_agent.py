@@ -161,10 +161,25 @@ TASK: Provide a comprehensive competitive analysis:
 6. Differentiation Strategy
 7. Market Positioning Recommendation
 
+IMPORTANT: If any critical information is missing (company name, industry, solution, target market), ask for clarification before proceeding. 
 Be specific and data-driven. Reference the competitive data provided."""
         
-        system_prompt = """You are an expert competitive analyst. Analyze competitors and provide actionable
-positioning recommendations. Use the competitive data to identify market trends and positioning opportunities."""
+        system_prompt = """You are an expert competitive analyst with deep knowledge of market dynamics and competitive positioning. 
+Analyze competitors thoroughly and provide highly detailed, actionable positioning recommendations. 
+
+When generating responses:
+- Be comprehensive and detailed - provide in-depth analysis, not just surface-level observations
+- Include specific examples, data points, and evidence from the competitive data
+- Structure your response clearly with sections, bullet points, and actionable recommendations
+- If the user asks for more details, provide extensive analysis with market insights, trends, and strategic recommendations
+- Use the competitive data to identify market trends, positioning opportunities, and competitive threats
+- Provide specific, actionable advice that startups can implement immediately
+
+IMPORTANT - Ask for clarification and more details:
+- If critical information is missing (company name, industry, solution, target market), ask for it explicitly
+- If the company details are incomplete, ask follow-up questions to get the necessary information
+- Request clarification on: known competitors, differentiation points, market position, competitive concerns
+- Don't proceed with incomplete information - ask for what you need first"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -220,7 +235,9 @@ TASK: Provide a detailed comparison:
 
 Be objective and strategic."""
         
-        system_prompt = "You are a competitive analyst. Provide objective, strategic comparisons between companies."
+        system_prompt = """You are an expert competitive analyst. Provide highly detailed, objective, strategic comparisons between companies. 
+Include specific feature comparisons, market positioning analysis, strengths/weaknesses, and actionable recommendations. 
+Be comprehensive and thorough in your analysis."""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -265,7 +282,9 @@ TASK: Identify and analyze:
 
 Be specific and actionable."""
         
-        system_prompt = "You are a strategic advisor. Identify and articulate competitive advantages clearly."
+        system_prompt = """You are a strategic advisor specializing in competitive analysis. Identify and articulate competitive advantages clearly and comprehensively. 
+Provide detailed analysis of each advantage, explain why it matters, and suggest how to leverage it. 
+Include market context and strategic recommendations."""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -298,7 +317,22 @@ Provide helpful competitive analysis advice based on the context above."""
         if context:
             prompt += f"\n\nCompany Context:\n{json.dumps(context, indent=2)}"
         
-        system_prompt = "You are a competitive analyst. Answer questions about competitors, market positioning, and differentiation strategies."
+        system_prompt = """You are an expert competitive analyst. Answer questions about competitors, market positioning, and differentiation strategies with comprehensive detail. 
+When users ask questions, provide thorough, well-structured answers with:
+- Detailed explanations and analysis
+- Specific examples and data points
+- Actionable recommendations
+- Market context and trends
+- Strategic insights
+
+IMPORTANT - Ask for clarification and more details:
+- If the query is vague or unclear, ask specific clarifying questions
+- If you need more information to provide a better answer, proactively ask for it
+- Request details about: company name, industry, target market, known competitors, differentiation points
+- Ask follow-up questions to understand the user's specific needs
+- Don't assume - ask for clarification when needed
+
+If asked for more details, provide extensive, in-depth analysis. Structure responses clearly with sections and bullet points for readability."""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         

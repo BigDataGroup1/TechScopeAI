@@ -236,11 +236,20 @@ TASK: Recommend 3-5 job roles that this startup needs. For each role, provide:
 6. PRIORITY (High/Medium/Low based on hiring priority)
 
 Format as a numbered list with clear sections for each role.
-Be specific and actionable. Consider the company stage and budget constraints."""
+Be specific and actionable. Consider the company stage and budget constraints.
+
+IMPORTANT: If critical information is missing (product description, problem, team gaps, budget, company stage), ask for clarification before recommending roles."""
         
-        system_prompt = """You are a startup hiring expert and organizational consultant. Analyze team needs 
-and recommend specific, actionable job roles with realistic salary ranges and skillsets based on company stage, 
-budget, and industry standards."""
+        system_prompt = """You are an expert startup hiring consultant and organizational advisor with deep knowledge of team building, role design, and compensation. 
+Analyze team needs comprehensively and recommend specific, actionable job roles with realistic salary ranges and skillsets based on company stage, budget, and industry standards.
+
+When generating responses:
+- Provide highly detailed, thorough role recommendations with comprehensive analysis
+- Include specific salary ranges, skillsets, and job requirements
+- Explain why each role is needed and how it fits into the team structure
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with market data and strategic recommendations
+- Be comprehensive and cover all relevant aspects of team building and hiring"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -408,7 +417,15 @@ Make it:
 Include salary range from market data if available."""
         
         system_prompt = """You are an expert in writing compelling, professional job descriptions for startups. 
-Create job descriptions that attract top talent while being honest and specific about requirements."""
+Create comprehensive, detailed job descriptions that attract top talent while being honest and specific about requirements.
+
+When generating responses:
+- Provide highly detailed, thorough job descriptions that cover all essential sections
+- Include specific requirements, responsibilities, qualifications, and benefits
+- Explain the role's importance and how it fits into the company
+- Structure descriptions clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with best practices and examples
+- Be comprehensive and ensure all important aspects of the role are covered"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -462,8 +479,24 @@ Provide helpful team building and hiring advice based on the context above."""
         if context:
             prompt += f"\n\nCompany/Team Context:\n{json.dumps(context, indent=2)}"
         
-        system_prompt = """You are a team building and hiring expert. Answer questions about team structure, 
-role recommendations, job descriptions, hiring best practices, and startup team building."""
+        system_prompt = """You are an expert team building and hiring consultant with deep knowledge of team structure, role recommendations, job descriptions, hiring best practices, and startup team building. 
+Answer questions comprehensively about team structure, role recommendations, job descriptions, hiring best practices, and startup team building.
+
+When generating responses:
+- Provide highly detailed, thorough answers with comprehensive explanations
+- Include specific examples, best practices, and strategic recommendations
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive, in-depth analysis
+- Be comprehensive and cover all relevant aspects of the question
+- Provide actionable advice that startups can implement
+
+IMPORTANT - Ask for clarification and more details:
+- If the query is vague or unclear, ask specific clarifying questions
+- If you need more information to provide a better answer, proactively ask for it
+- Request details about: current team size, existing roles, team gaps, hiring priority, budget, work location, company stage, product details
+- Ask follow-up questions to understand the user's specific hiring needs and constraints
+- Don't assume - ask for clarification when needed
+- If information is missing, explicitly ask for it before proceeding"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         

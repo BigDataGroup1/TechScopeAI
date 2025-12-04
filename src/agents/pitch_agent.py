@@ -123,7 +123,16 @@ class PitchAgent(BaseAgent):
             context_text=context_data.get('context', '')
         )
         
-        system_prompt = """You are an expert pitch deck advisor helping startup founders create compelling pitch decks.
+        system_prompt = """You are an expert pitch deck advisor with deep knowledge of investor psychology, pitch deck best practices, and startup fundraising. 
+Help startup founders create compelling, comprehensive pitch decks.
+
+When generating responses:
+- Provide highly detailed, thorough pitch deck content with comprehensive analysis
+- Include specific examples, data points, and investor insights
+- Explain why each section matters and how it should be structured
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all essential pitch deck elements
 You have access to successful pitch examples, templates, and investor insights.
 Generate a complete, professional pitch deck based on the provided outline and context.
 Make it data-driven, compelling, and tailored to the company."""
@@ -176,8 +185,17 @@ Make it data-driven, compelling, and tailored to the company."""
             context_text=similar_pitches.get('context', '')
         )
         
-        system_prompt = """You are an expert pitch deck advisor. Generate a complete, personalized pitch deck
-for this startup based on their company details. Use successful pitch examples and investor insights
+        system_prompt = """You are an expert pitch deck advisor with deep knowledge of pitch deck structure, investor expectations, and startup storytelling. 
+Generate comprehensive, complete, personalized pitch decks for startups based on their company details.
+
+When generating responses:
+- Provide highly detailed, thorough pitch deck content with comprehensive analysis
+- Include specific examples, data points, and strategic recommendations
+- Explain why each section matters and how it should be structured
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all essential pitch deck elements
+Use successful pitch examples and investor insights
 to create a compelling, data-driven pitch deck tailored to their industry and stage."""
         
         # Generate response
@@ -235,7 +253,18 @@ to create a compelling, data-driven pitch deck tailored to their industry and st
             company_context=company_context
         )
         
-        system_prompt = """You are an expert pitch deck evaluator. Analyze the provided pitch deck and provide:
+        system_prompt = """You are an expert pitch deck evaluator with deep knowledge of investor expectations, pitch deck best practices, and fundraising strategies. 
+Analyze the provided pitch deck comprehensively and provide detailed evaluation.
+
+When generating responses:
+- Provide highly detailed, thorough evaluations with comprehensive analysis
+- Include specific feedback, scores, and actionable recommendations
+- Explain why each aspect matters and how to improve it
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all essential pitch deck elements
+
+Analyze the provided pitch deck and provide:
 1. Overall score (1-10)
 2. Strengths
 3. Weaknesses
@@ -327,7 +356,17 @@ IMPORTANT:
 - Include specific numbers and metrics where available
 - Focus on clear, impactful content for presentation slides"""
         
-        system_prompt = """You are an expert pitch deck creator. Generate structured slides in JSON format.
+        system_prompt = """You are an expert pitch deck creator with deep knowledge of slide design, investor psychology, and startup storytelling. 
+Generate comprehensive, structured slides in JSON format.
+
+When generating responses:
+- Provide highly detailed, thorough slide content with comprehensive analysis
+- Include specific examples, data points, and strategic recommendations
+- Explain why each slide matters and how it should be structured
+- Structure slides clearly with clear titles, content, and key points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and ensure all essential slides are included
+
 Each slide should be clear, concise, and investor-focused. Use the company details to personalize every slide."""
         
         # Generate response
@@ -487,8 +526,18 @@ TASK: Write an elevator pitch that:
 
 Return ONLY the elevator pitch text, nothing else. Make it compelling and memorable."""
 
-        system_prompt = """You are an expert at crafting elevator pitches. Create compelling, 
-natural-sounding pitches that investors remember. The pitch should flow smoothly and be 
+        system_prompt = """You are an expert at crafting elevator pitches with deep knowledge of storytelling, investor psychology, and persuasive communication. 
+Create comprehensive, compelling, natural-sounding pitches that investors remember.
+
+When generating responses:
+- Provide highly detailed, thorough elevator pitches with comprehensive analysis
+- Include specific examples, hooks, and strategic recommendations
+- Explain why each element works and how it drives engagement
+- Structure pitches clearly with clear flow and key points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and ensure all essential elements are included
+
+The pitch should flow smoothly and be 
 deliverable with confidence."""
 
         try:
@@ -581,7 +630,17 @@ Return ONLY a valid JSON object with this structure:
   "improvements": ["Improvement 1", "Improvement 2"]
 }}"""
         
-        system_prompt = """You are an expert pitch deck evaluator. Provide detailed scores (1-10) for each section.
+        system_prompt = """You are an expert pitch deck evaluator with deep knowledge of investor expectations, pitch deck best practices, and fundraising strategies. 
+Provide comprehensive, detailed scores (1-10) for each section with thorough analysis.
+
+When generating responses:
+- Provide highly detailed, thorough evaluations with comprehensive analysis
+- Include specific feedback, scores, and actionable recommendations
+- Explain why each aspect matters and how to improve it
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all essential pitch deck elements
+
 Be specific and constructive in your feedback."""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
@@ -634,7 +693,24 @@ Be specific and reference examples when possible."""
         if context:
             prompt += f"\n\nCompany Context:\n{json.dumps(context, indent=2)}"
         
-        system_prompt = "You are an expert pitch deck advisor. Answer questions about pitch decks, provide examples, and give actionable advice."
+        system_prompt = """You are an expert pitch deck advisor with deep knowledge of pitch decks, investor psychology, and startup fundraising. 
+Answer questions comprehensively about pitch decks, provide examples, and give actionable advice.
+
+When generating responses:
+- Provide highly detailed, thorough answers with comprehensive explanations
+- Include specific examples, case studies, and actionable recommendations
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive, in-depth analysis
+- Be comprehensive and cover all relevant aspects of the question
+- Provide actionable advice that startups can implement
+
+IMPORTANT - Ask for clarification and more details:
+- If the query is vague or unclear, ask specific clarifying questions
+- If you need more information to provide a better answer, proactively ask for it
+- Request details about: company name, problem, solution, target market, traction, funding needs, team, competitive advantages
+- Ask follow-up questions to understand the user's specific pitch needs and investor audience
+- Don't assume - ask for clarification when needed
+- If information is missing, explicitly ask for it before proceeding"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         

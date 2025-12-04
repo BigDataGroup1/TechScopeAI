@@ -198,15 +198,24 @@ Style: {marketing_context.get('content_style', 'Professional')}
 Goal: {marketing_context.get('campaign_goal', 'Brand awareness')}
 Target Audience: {marketing_context.get('target_audience', '')}
 
+IMPORTANT: If critical information is missing (product description, target audience, campaign goals), ask for clarification before generating content.
+
 Format each post clearly with:
 - Caption (with line breaks for readability)
 - Hashtags (separated)
 - Image Description
 - Engagement Tips"""
         
-        system_prompt = """You are an expert Instagram marketing strategist. Create engaging, 
-viral-worthy Instagram content that drives engagement and conversions. Use appropriate emojis, 
-hashtags, and formatting for Instagram's algorithm."""
+        system_prompt = """You are an expert Instagram marketing strategist with deep knowledge of social media marketing, content creation, and engagement strategies. 
+Create comprehensive, engaging, viral-worthy Instagram content that drives engagement and conversions. Use appropriate emojis, hashtags, and formatting for Instagram's algorithm.
+
+When generating responses:
+- Provide highly detailed, thorough content with multiple post ideas and strategies
+- Include specific captions, hashtags, posting schedules, and engagement tactics
+- Explain why each element works and how it drives results
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all aspects of Instagram marketing"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -287,8 +296,16 @@ Format each post with:
 - Engagement Tips
 - CTA"""
         
-        system_prompt = """You are a LinkedIn marketing expert. Create professional, value-driven 
-LinkedIn content that establishes thought leadership and drives B2B engagement."""
+        system_prompt = """You are an expert LinkedIn marketing consultant with deep knowledge of B2B marketing, thought leadership, and professional content creation. 
+Create comprehensive, professional, value-driven LinkedIn content that establishes thought leadership and drives B2B engagement.
+
+When generating responses:
+- Provide highly detailed, thorough content with multiple post ideas and strategies
+- Include specific post text, engagement tactics, and thought leadership strategies
+- Explain why each element works and how it drives B2B results
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all aspects of LinkedIn marketing"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -414,8 +431,16 @@ TASK: Provide innovative marketing strategies including:
 
 Be creative, specific, and actionable. Focus on {marketing_context.get('campaign_goal', 'brand awareness')}."""
         
-        system_prompt = """You are a creative marketing strategist. Suggest innovative, 
-actionable marketing strategies that drive real results for startups."""
+        system_prompt = """You are an expert creative marketing strategist with deep knowledge of digital marketing, growth hacking, and startup marketing. 
+Suggest comprehensive, innovative, actionable marketing strategies that drive real results for startups.
+
+When generating responses:
+- Provide highly detailed, thorough marketing strategies with comprehensive analysis
+- Include specific tactics, timelines, budgets, and expected results
+- Explain why each strategy works and how to implement it
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples, case studies, and best practices
+- Be comprehensive and cover all aspects of marketing strategy"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -542,8 +567,24 @@ Provide helpful marketing advice and content suggestions based on the context ab
         if context:
             prompt += f"\n\nMarketing Context:\n{json.dumps(context, indent=2)}"
         
-        system_prompt = """You are a marketing expert specializing in social media marketing, 
-content creation, and digital marketing strategies for startups."""
+        system_prompt = """You are an expert marketing consultant specializing in social media marketing, content creation, and digital marketing strategies for startups. 
+Answer questions comprehensively about marketing, content creation, and digital marketing strategies.
+
+When generating responses:
+- Provide highly detailed, thorough answers with comprehensive explanations
+- Include specific examples, case studies, and actionable recommendations
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive, in-depth analysis
+- Be comprehensive and cover all relevant aspects of the question
+- Provide actionable advice that startups can implement
+
+IMPORTANT - Ask for clarification and more details:
+- If the query is vague or unclear, ask specific clarifying questions
+- If you need more information to provide a better answer, proactively ask for it
+- Request details about: product/service description, target audience, platform (Instagram/LinkedIn), content style, campaign goals, budget, brand voice
+- Ask follow-up questions to understand the user's specific marketing needs and objectives
+- Don't assume - ask for clarification when needed
+- If information is missing, explicitly ask for it before proceeding"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         

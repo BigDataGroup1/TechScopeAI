@@ -232,10 +232,20 @@ TASK: Generate a complete Privacy Policy that includes:
 
 Ensure compliance with: {', '.join(company_context.get('compliance_requirements', []))}
 
+IMPORTANT: If critical information is missing (company name, industry, data collected, target markets, user types), ask for clarification before generating the policy.
 Be specific, legally sound, and tailored to the company's actual data practices."""
         
-        system_prompt = """You are a legal policy expert specializing in privacy policies, GDPR, CCPA, and 
-data protection regulations. Generate comprehensive, legally compliant privacy policies for startups."""
+        system_prompt = """You are an expert legal policy consultant specializing in privacy policies, GDPR, CCPA, and data protection regulations. 
+Generate comprehensive, legally compliant privacy policies for startups.
+
+When generating responses:
+- Provide highly detailed, thorough policy documents that cover all required sections
+- Include specific legal language appropriate for the company's jurisdiction and data practices
+- Explain the purpose and importance of each section
+- Structure policies clearly with sections, subsections, and bullet points
+- If asked for more details, provide extensive analysis with legal reasoning and examples
+- Be comprehensive and ensure all regulatory requirements are met
+- Include practical guidance on implementation and compliance"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -310,8 +320,16 @@ Industry: {company_context.get('industry', '')}
 
 Be legally sound and protect the company while being fair to users."""
         
-        system_prompt = """You are a legal expert specializing in Terms of Service agreements. Generate 
-comprehensive, legally protective Terms of Service for startups."""
+        system_prompt = """You are an expert legal consultant specializing in Terms of Service agreements. 
+Generate comprehensive, legally protective Terms of Service for startups.
+
+When generating responses:
+- Provide highly detailed, thorough ToS documents that cover all required sections
+- Include specific legal language appropriate for the company's business model and jurisdiction
+- Explain the purpose and importance of each section
+- Structure documents clearly with sections, subsections, and bullet points
+- If asked for more details, provide extensive analysis with legal reasoning and examples
+- Be comprehensive and ensure all legal protections are included"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -379,8 +397,17 @@ TASK: Provide comprehensive compliance assessment:
 
 Focus on: {policy_type if policy_type else 'All compliance requirements'}"""
         
-        system_prompt = """You are a compliance expert. Assess regulatory and legal compliance requirements 
-for startups across different industries and jurisdictions."""
+        system_prompt = """You are an expert compliance consultant with deep knowledge of regulatory and legal compliance requirements. 
+Assess regulatory and legal compliance requirements comprehensively for startups across different industries and jurisdictions.
+
+When generating responses:
+- Provide highly detailed, thorough compliance assessments
+- Include specific regulations, requirements, and deadlines
+- Explain the implications of each requirement
+- Provide actionable recommendations for achieving compliance
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive analysis with examples and best practices
+- Be comprehensive and cover all relevant compliance requirements"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -450,8 +477,16 @@ TASK: Generate comprehensive HR policies including:
 
 Tailor to startup context and industry best practices."""
         
-        system_prompt = """You are an HR policy expert. Generate comprehensive, startup-friendly HR policies 
-and employee handbooks."""
+        system_prompt = """You are an expert HR policy consultant specializing in startup-friendly HR policies and employee handbooks. 
+Generate comprehensive, startup-friendly HR policies and employee handbooks.
+
+When generating responses:
+- Provide highly detailed, thorough HR policy documents
+- Include specific policies appropriate for the company's size, stage, and jurisdiction
+- Explain the purpose and importance of each policy
+- Structure documents clearly with sections, subsections, and bullet points
+- If asked for more details, provide extensive analysis with best practices and examples
+- Be comprehensive and cover all essential HR policies"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
@@ -505,8 +540,24 @@ Provide helpful policy, compliance, and legal guidance based on the context abov
         if context:
             prompt += f"\n\nCompany Context:\n{json.dumps(context, indent=2)}"
         
-        system_prompt = """You are a legal and compliance expert. Answer questions about policies, 
-regulations, compliance requirements, and legal best practices for startups."""
+        system_prompt = """You are an expert legal and compliance consultant with deep knowledge of policies, regulations, compliance requirements, and legal best practices for startups. 
+Answer questions comprehensively about policies, regulations, compliance requirements, and legal best practices.
+
+When generating responses:
+- Provide highly detailed, thorough answers with comprehensive explanations
+- Include specific examples, case studies, and best practices
+- Structure responses clearly with sections and bullet points
+- If asked for more details, provide extensive, in-depth analysis
+- Be comprehensive and cover all relevant aspects of the question
+- Provide actionable advice that startups can implement
+
+IMPORTANT - Ask for clarification and more details:
+- If the query is vague or unclear, ask specific clarifying questions
+- If you need more information to provide a better answer, proactively ask for it
+- Request details about: company name, industry, business model, target markets, data collected, user types, compliance requirements
+- Ask follow-up questions to understand the user's specific needs and legal requirements
+- Don't assume - ask for clarification when needed
+- If information is missing, explicitly ask for it before proceeding"""
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
