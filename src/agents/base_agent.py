@@ -2,6 +2,7 @@
 
 import logging
 import os
+import json
 from typing import Dict, List, Optional
 from abc import ABC, abstractmethod
 
@@ -14,6 +15,14 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+
+# Try to import PersonalizationAgent
+try:
+    import weaviate
+    from weaviate.agents.personalize import PersonalizationAgent
+    PERSONALIZATION_AGENT_AVAILABLE = True
+except ImportError:
+    PERSONALIZATION_AGENT_AVAILABLE = False
 
 from ..rag.retriever import Retriever
 
@@ -48,9 +57,51 @@ class BaseAgent(ABC):
             raise ImportError("openai package required. Install with: pip install openai")
         
         self.client = OpenAI(api_key=api_key)
+        
+        # Initialize PersonalizationAgent if available (for Weaviate Cloud)
+        self.personalization_agent = None
+        if PERSONALIZATION_AGENT_AVAILABLE:
+            try:
+                weaviate_url = os.getenv("WEAVIATE_URL", "http://localhost:8081")
+                is_local = "localhost" in weaviate_url or "127.0.0.1" in weaviate_url or not weaviate_url.startswith("https://")
+                
+                if not is_local:
+                    # Only use PersonalizationAgent with Weaviate Cloud
+                    try:
+                        # Connect to Weaviate (reuse retriever's connection if available)
+                        if hasattr(retriever, 'query_agent_retriever') and hasattr(retriever.query_agent_retriever, 'client'):
+                            weaviate_client = retriever.query_agent_retriever.client
+                        else:
+                            # Create new connection
+                            if weaviate_url.startswith("http://"):
+                                url_parts = weaviate_url.replace("http://", "").split(":")
+                                host = url_parts[0]
+                                port = int(url_parts[1]) if len(url_parts) > 1 else 8081
+                                weaviate_client = weaviate.connect_to_custom(
+                                    http_host=host, http_port=port, http_secure=False,
+                                    grpc_host=host, grpc_port=50051, grpc_secure=False
+                                )
+                            else:
+                                url_parts = weaviate_url.replace("https://", "").split(":")
+                                host = url_parts[0]
+                                port = int(url_parts[1]) if len(url_parts) > 1 else 443
+                                weaviate_client = weaviate.connect_to_custom(
+                                    http_host=host, http_port=port, http_secure=True,
+                                    grpc_host=host, grpc_port=50051, grpc_secure=True
+                                )
+                        
+                        self.personalization_agent = PersonalizationAgent(client=weaviate_client)
+                        logger.info(f"✅ PersonalizationAgent initialized for {category} agent")
+                    except Exception as e:
+                        logger.warning(f"Could not initialize PersonalizationAgent: {e}, will use company data for personalization")
+                else:
+                    logger.info(f"PersonalizationAgent requires Weaviate Cloud (local instance detected), will use company data for personalization")
+            except Exception as e:
+                logger.warning(f"PersonalizationAgent not available: {e}, will use company data for personalization")
+        
         logger.info(f"Initialized {category} agent with model {model}")
     
-    def retrieve_context(self, query: str, top_k: int = 5, 
+    def retrieve_context(self, query: str, top_k: int = 3, 
                         category_filter: Optional[str] = None) -> Dict:
         """
         Retrieve relevant context using RAG.
@@ -65,23 +116,111 @@ class BaseAgent(ABC):
         """
         return self.retriever.retrieve_with_context(query, top_k=top_k)
     
-    def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def _extract_company_data(self, context: Optional[Dict] = None) -> Optional[Dict]:
         """
-        Generate response using LLM.
+        Extract company data from context dictionary.
+        
+        Args:
+            context: Context dictionary that may contain company data
+            
+        Returns:
+            Company data dictionary or None
+        """
+        if not context:
+            return None
+        
+        # Check if context itself is company data (has company_name, etc.)
+        if isinstance(context, dict) and 'company_name' in context:
+            return context
+        
+        # Check for nested company_data
+        if 'company_data' in context:
+            return context['company_data']
+        
+        # Check for common company data keys
+        company_keys = ['company_name', 'industry', 'problem', 'solution', 'target_market']
+        if any(key in context for key in company_keys):
+            return context
+        
+        return None
+    
+    def personalize_prompt(self, prompt: str, company_data: Optional[Dict] = None) -> str:
+        """
+        Personalize prompt with company data for startup-specific responses.
+        
+        Args:
+            prompt: Original prompt
+            company_data: Company/startup data dictionary
+            
+        Returns:
+            Personalized prompt with company context
+        """
+        if not company_data:
+            return prompt
+        
+        # Extract key company information
+        company_name = company_data.get('company_name', '')
+        industry = company_data.get('industry', '')
+        problem = company_data.get('problem', '')
+        solution = company_data.get('solution', '')
+        target_market = company_data.get('target_market', '')
+        current_stage = company_data.get('current_stage', '')
+        funding_goal = company_data.get('funding_goal', '')
+        traction = company_data.get('traction', '')
+        
+        # Build personalized context
+        personalization_context = []
+        
+        if company_name:
+            personalization_context.append(f"Company: {company_name}")
+        if industry:
+            personalization_context.append(f"Industry: {industry}")
+        if problem:
+            personalization_context.append(f"Problem: {problem}")
+        if solution:
+            personalization_context.append(f"Solution: {solution}")
+        if target_market:
+            personalization_context.append(f"Target Market: {target_market}")
+        if current_stage:
+            personalization_context.append(f"Current Stage: {current_stage}")
+        if funding_goal:
+            personalization_context.append(f"Funding Goal: {funding_goal}")
+        if traction:
+            personalization_context.append(f"Traction: {traction}")
+        
+        if personalization_context:
+            personalized_header = "=== PERSONALIZED FOR THIS STARTUP ===\n" + "\n".join(personalization_context) + "\n=== END PERSONALIZATION ===\n\n"
+            return personalized_header + prompt
+        
+        return prompt
+    
+    def generate_response(self, prompt: str, system_prompt: Optional[str] = None, 
+                         company_data: Optional[Dict] = None) -> str:
+        """
+        Generate response using LLM with automatic personalization.
         
         Args:
             prompt: User prompt
             system_prompt: Optional system prompt
+            company_data: Optional company data for personalization
             
         Returns:
-            LLM response text
+            LLM response text (personalized to the startup)
         """
         messages = []
         
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+        # Enhance system prompt with personalization instructions
+        enhanced_system_prompt = system_prompt or ""
+        if company_data:
+            company_name = company_data.get('company_name', 'this startup')
+            enhanced_system_prompt += f"\n\nIMPORTANT: All responses must be personalized specifically for {company_name}. Use the company's specific details, industry, problem, solution, and context provided. Make responses relevant and tailored to this startup's unique situation."
         
-        messages.append({"role": "user", "content": prompt})
+        if enhanced_system_prompt:
+            messages.append({"role": "system", "content": enhanced_system_prompt})
+        
+        # Personalize the prompt with company data
+        personalized_prompt = self.personalize_prompt(prompt, company_data)
+        messages.append({"role": "user", "content": personalized_prompt})
         
         try:
             response = self.client.chat.completions.create(

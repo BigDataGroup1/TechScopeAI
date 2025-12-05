@@ -251,7 +251,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with market data and strategic recommendations
 - Be comprehensive and cover all relevant aspects of team building and hiring"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = team_data.get('sources', [])
         for web_result in web_results:
@@ -310,7 +312,9 @@ Be specific with numbers and data points."""
         
         system_prompt = "You are a compensation and hiring market research expert. Extract and summarize salary and skillset data from search results."
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = []
         for result in salary_results + skills_results:
@@ -427,7 +431,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with best practices and examples
 - Be comprehensive and ensure all important aspects of the role are covered"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = market_data.get('sources', []) + jd_data.get('sources', [])
         for web_result in web_results:
@@ -498,7 +504,9 @@ IMPORTANT - Ask for clarification and more details:
 - Don't assume - ask for clarification when needed
 - If information is missing, explicitly ask for it before proceeding"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = context_data.get('sources', [])
         for web_result in web_results:

@@ -247,7 +247,9 @@ When generating responses:
 - Be comprehensive and ensure all regulatory requirements are met
 - Include practical guidance on implementation and compliance"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = policy_context.get('sources', [])
         for web_result in web_results:
@@ -331,7 +333,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with legal reasoning and examples
 - Be comprehensive and ensure all legal protections are included"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = tos_context.get('sources', [])
         for web_result in web_results:
@@ -409,7 +413,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with examples and best practices
 - Be comprehensive and cover all relevant compliance requirements"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = compliance_context.get('sources', [])
         for web_result in web_results:
@@ -488,7 +494,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with best practices and examples
 - Be comprehensive and cover all essential HR policies"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = hr_context.get('sources', [])
         for web_result in web_results:
@@ -559,7 +567,9 @@ IMPORTANT - Ask for clarification and more details:
 - Don't assume - ask for clarification when needed
 - If information is missing, explicitly ask for it before proceeding"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = context_data.get('sources', [])
         for web_result in web_results:

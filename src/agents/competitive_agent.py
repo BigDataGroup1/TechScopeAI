@@ -181,7 +181,9 @@ IMPORTANT - Ask for clarification and more details:
 - Request clarification on: known competitors, differentiation points, market position, competitive concerns
 - Don't proceed with incomplete information - ask for what you need first"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_details)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         # Combine sources
         all_sources = (
@@ -239,7 +241,9 @@ Be objective and strategic."""
 Include specific feature comparisons, market positioning analysis, strengths/weaknesses, and actionable recommendations. 
 Be comprehensive and thorough in your analysis."""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_details)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         return self.format_response(
             response=response_text,
@@ -286,7 +290,9 @@ Be specific and actionable."""
 Provide detailed analysis of each advantage, explain why it matters, and suggest how to leverage it. 
 Include market context and strategic recommendations."""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_details)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         return self.format_response(
             response=response_text,
@@ -334,7 +340,9 @@ IMPORTANT - Ask for clarification and more details:
 
 If asked for more details, provide extensive, in-depth analysis. Structure responses clearly with sections and bullet points for readability."""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         return self.format_response(
             response=response_text,

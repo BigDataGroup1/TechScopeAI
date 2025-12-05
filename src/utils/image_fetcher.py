@@ -22,7 +22,7 @@ class ImageFetcher:
     def get_image_for_slide(self, slide_title: str, slide_content: str, 
                            keywords: Optional[List[str]] = None) -> Optional[str]:
         """
-        Get a relevant image for a slide.
+        Get a relevant professional image for a presentation slide.
         
         Args:
             slide_title: Title of the slide
@@ -32,16 +32,18 @@ class ImageFetcher:
         Returns:
             Path to downloaded image file, or None if not found
         """
-        # Build search query
+        # Build search query - add professional/presentation keywords for better results
         if keywords:
-            query = " ".join(keywords[:3])  # Use first 3 keywords
+            # Add professional keywords for presentation images
+            professional_keywords = ["professional", "business", "corporate"]
+            query = " ".join(keywords[:3] + professional_keywords[:1])  # Use first 3 keywords + professional
         else:
             # Extract keywords from title
             query = slide_title.lower()
             # Remove common words
             stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"}
             words = [w for w in query.split() if w not in stop_words]
-            query = " ".join(words[:3]) if words else slide_title.lower()
+            query = " ".join(words[:3] + ["professional", "business"]) if words else slide_title.lower() + " professional business"
         
         # Try Pexels first (free, no key needed for basic usage)
         image_path = self._fetch_from_pexels(query)
@@ -72,9 +74,11 @@ class ImageFetcher:
             if api_key:
                 headers["Authorization"] = api_key  # Pexels uses API key directly as Authorization header
             
+            # Add professional/business keywords for presentation-quality images
+            professional_query = f"{query} professional business corporate presentation"
             params = {
-                "query": query,
-                "per_page": 1,
+                "query": professional_query,
+                "per_page": 5,  # Get more results to find professional ones
                 "orientation": "landscape",
                 "size": "large"
             }
@@ -84,9 +88,24 @@ class ImageFetcher:
             if response.status_code == 200:
                 data = response.json()
                 if data.get("photos"):
-                    photo = data["photos"][0]
-                    image_url = photo["src"]["large"]
-                    return self._download_image(image_url, query, "pexels")
+                    # Prefer professional/business-looking images
+                    # Check photo description/tags for professional keywords
+                    professional_keywords = ["business", "professional", "corporate", "office", "presentation", "meeting"]
+                    selected_photo = None
+                    
+                    # Try to find a professional-looking image
+                    for photo in data["photos"]:
+                        photo_text = (photo.get("alt", "") + " " + str(photo.get("photographer", ""))).lower()
+                        if any(keyword in photo_text for keyword in professional_keywords):
+                            selected_photo = photo
+                            break
+                    
+                    # Fallback to first photo if no professional match
+                    if not selected_photo:
+                        selected_photo = data["photos"][0]
+                    
+                    image_url = selected_photo["src"]["large"]
+                    return self._download_image(image_url, professional_query, "pexels")
             elif response.status_code == 401:
                 # No API key, try without auth (may have rate limits)
                 logger.info("Pexels API key not set. Using basic access (may have rate limits)")
@@ -117,9 +136,11 @@ class ImageFetcher:
             if access_key:
                 url = "https://api.unsplash.com/search/photos"
                 headers = {"Authorization": f"Client-ID {access_key}"}
+                # Add professional keywords for presentation images
+                professional_query = f"{query} professional business corporate presentation"
                 params = {
-                    "query": query,
-                    "per_page": 1,
+                    "query": professional_query,
+                    "per_page": 5,  # Get more results to find professional ones
                     "orientation": "landscape"
                 }
                 
@@ -128,8 +149,22 @@ class ImageFetcher:
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("results"):
-                        photo = data["results"][0]
-                        image_url = photo["urls"]["regular"]
+                        # Prefer professional/business-looking images
+                        professional_keywords = ["business", "professional", "corporate", "office", "presentation", "meeting"]
+                        selected_photo = None
+                        
+                        # Try to find a professional-looking image
+                        for photo in data["results"]:
+                            photo_text = (photo.get("description", "") + " " + str(photo.get("tags", []))).lower()
+                            if any(keyword in photo_text for keyword in professional_keywords):
+                                selected_photo = photo
+                                break
+                        
+                        # Fallback to first photo if no professional match
+                        if not selected_photo:
+                            selected_photo = data["results"][0]
+                        
+                        image_url = selected_photo["urls"]["regular"]
                         return self._download_image(image_url, query, "unsplash")
             else:
                 # Fallback: Use Unsplash Source (simple, no key needed)

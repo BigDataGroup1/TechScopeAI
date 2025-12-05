@@ -137,8 +137,10 @@ You have access to successful pitch examples, templates, and investor insights.
 Generate a complete, professional pitch deck based on the provided outline and context.
 Make it data-driven, compelling, and tailored to the company."""
         
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
         # Generate response
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         return self.format_response(
             response=response_text,
@@ -198,8 +200,10 @@ When generating responses:
 Use successful pitch examples and investor insights
 to create a compelling, data-driven pitch deck tailored to their industry and stage."""
         
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_details)
         # Generate response
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         # Combine sources
         all_sources = similar_pitches.get('sources', []) + investor_advice.get('sources', [])
@@ -369,8 +373,10 @@ When generating responses:
 
 Each slide should be clear, concise, and investor-focused. Use the company details to personalize every slide."""
         
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_details)
         # Generate response
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         # Parse JSON from response
         try:

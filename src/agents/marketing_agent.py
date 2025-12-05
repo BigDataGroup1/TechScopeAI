@@ -162,7 +162,7 @@ class MarketingAgent(BaseAgent):
         # Retrieve marketing examples
         marketing_data = self.retrieve_context(
             f"Instagram marketing content {marketing_context.get('content_style', '')} {marketing_context.get('campaign_goal', '')}",
-            top_k=5
+            top_k=3  # Reduced for faster performance
         )
         
         # Web search for best practices if needed
@@ -217,7 +217,75 @@ When generating responses:
 - If asked for more details, provide extensive analysis with examples and best practices
 - Be comprehensive and cover all aspects of Instagram marketing"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(marketing_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
+        
+        # Extract image description from response and generate image
+        image_result = None
+        try:
+            # Get product description from context
+            product_desc = marketing_context.get('solution', marketing_context.get('product_description', marketing_context.get('company_name', 'product')))
+            style = marketing_context.get('content_style', 'Professional')
+            
+            # Try to extract image description from the response
+            image_description = None
+            if "Image Description" in response_text or "Image Prompt" in response_text:
+                # Extract the image description from the response
+                lines = response_text.split('\n')
+                in_image_section = False
+                image_lines = []
+                for line in lines:
+                    if "Image Description" in line or "Image Prompt" in line:
+                        in_image_section = True
+                        continue
+                    if in_image_section:
+                        if line.strip() and not line.strip().startswith('-') and not line.strip().startswith('*'):
+                            image_lines.append(line.strip())
+                        elif line.strip().startswith('###') or line.strip().startswith('##') or line.strip().startswith('**'):
+                            break
+                
+                if image_lines:
+                    image_description = ' '.join(image_lines[:3])  # Take first 3 lines
+            
+            # If no image description found, create one from company data
+            if not image_description:
+                company_name = marketing_context.get('company_name', '')
+                # Check if this is for presentation/PPT (from context or platform)
+                is_for_presentation = marketing_context.get('platform', '').lower() in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+                if company_name:
+                    if is_for_presentation:
+                        image_description = f"Professional presentation image for {company_name}: {product_desc}, business presentation, corporate quality, clean and polished"
+                    else:
+                        image_description = f"{style} marketing image for {company_name}: {product_desc}, Instagram post, social media, modern design, professional"
+                else:
+                    if is_for_presentation:
+                        image_description = f"Professional presentation image for {product_desc}, business presentation, corporate quality, clean and polished"
+                    else:
+                        image_description = f"{style} marketing image for {product_desc}, Instagram post, social media, modern design, professional"
+            
+            # Check if this is for presentation/PPT
+            is_for_presentation = marketing_context.get('platform', '').lower() in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+            
+            # Generate the image
+            logger.info(f"Generating {'presentation' if is_for_presentation else 'Instagram'} image automatically for: {product_desc}")
+            logger.info(f"Image description: {image_description}")
+            
+            image_result = self.generate_marketing_image(
+                product_description=product_desc,
+                style=style,
+                image_style_description=image_description,
+                for_presentation=is_for_presentation
+            )
+            
+            if image_result and image_result.get('success'):
+                logger.info(f"✅ Image generated successfully: {image_result.get('image_path')}")
+            else:
+                logger.warning(f"Image generation failed: {image_result}")
+            
+        except Exception as e:
+            logger.error(f"Error generating image automatically: {e}", exc_info=True)
+            image_result = None
         
         all_sources = marketing_data.get('sources', [])
         for web_result in web_results:
@@ -227,10 +295,30 @@ When generating responses:
                 'similarity': web_result.get('relevance_score', 0)
             })
         
-        return self.format_response(
+        # Format base response
+        response_dict = self.format_response(
             response=response_text,
             sources=all_sources
         )
+        
+        # If image was generated, include it in the response
+        if image_result and image_result.get('success'):
+            # Add image information to response
+            response_dict['image_generated'] = True
+            response_dict['image_path'] = image_result.get('image_path')
+            response_dict['image_url'] = image_result.get('image_url')
+            response_dict['image_prompt'] = image_result.get('prompt_used')
+            response_dict['success'] = True  # Mark as successful image generation
+            logger.info(f"✅ Instagram content with image ready: {response_dict.get('image_path')}")
+        else:
+            # Still return response, but log that image generation failed
+            if image_result:
+                logger.warning(f"Image generation failed: {image_result.get('error', 'Unknown error')}")
+            else:
+                logger.warning("Image generation was not attempted or returned None")
+            response_dict['image_generated'] = False
+        
+        return response_dict
     
     def generate_linkedin_content(self, marketing_context: Dict) -> Dict:
         """
@@ -307,7 +395,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with examples and best practices
 - Be comprehensive and cover all aspects of LinkedIn marketing"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(marketing_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = linkedin_data.get('sources', [])
         for web_result in web_results:
@@ -323,7 +413,8 @@ When generating responses:
         )
     
     def generate_marketing_image(self, product_description: str, style: str, 
-                                 image_style_description: Optional[str] = None) -> Dict:
+                                 image_style_description: Optional[str] = None,
+                                 for_presentation: bool = False) -> Dict:
         """
         Generate marketing image using DALL-E 3.
         
@@ -331,27 +422,44 @@ When generating responses:
             product_description: Description of product/service
             style: Content style (quirky, professional, trendy)
             image_style_description: Optional additional style description
+            for_presentation: If True, generate professional presentation-quality image for PPT
             
         Returns:
             Dictionary with image URL and path
         """
-        logger.info(f"Generating marketing image with style: {style}")
+        logger.info(f"Generating marketing image with style: {style}, for_presentation: {for_presentation}")
         
         # Build image prompt based on style
-        style_prompts = {
-            "Quirky/Fun": "quirky, fun, playful, colorful, eye-catching, social media friendly",
-            "Professional": "professional, clean, modern, business-focused, high-quality",
-            "Trendy/Modern": "trendy, modern, sleek, contemporary, Instagram-worthy, viral potential",
-            "Mix of styles": "balanced, engaging, modern, professional yet approachable"
-        }
+        if for_presentation:
+            # Professional presentation-quality prompts for PPT
+            style_prompts = {
+                "Quirky/Fun": "professional, clean, modern business presentation, corporate quality, polished, executive-ready, presentation slide background, high-end business aesthetic",
+                "Professional": "professional, clean, modern, business-focused, high-quality, corporate presentation, executive-ready, polished, presentation slide background, sophisticated",
+                "Trendy/Modern": "professional, modern, sleek, contemporary, business presentation quality, corporate aesthetic, polished, executive-ready, presentation slide background",
+                "Mix of styles": "professional, clean, modern, business presentation, corporate quality, polished, executive-ready, balanced professional aesthetic"
+            }
+            presentation_suffix = ", presentation slide background, professional business image, corporate quality, suitable for PowerPoint presentation, clean and polished, no random elements, business-appropriate, executive presentation quality"
+        else:
+            # Original social media prompts
+            style_prompts = {
+                "Quirky/Fun": "quirky, fun, playful, colorful, eye-catching, social media friendly",
+                "Professional": "professional, clean, modern, business-focused, high-quality",
+                "Trendy/Modern": "trendy, modern, sleek, contemporary, Instagram-worthy, viral potential",
+                "Mix of styles": "balanced, engaging, modern, professional yet approachable"
+            }
+            presentation_suffix = ", high quality, social media ready"
         
         style_prompt = style_prompts.get(style, "professional, modern, engaging")
         
         # Combine prompts
         if image_style_description:
-            full_prompt = f"{image_style_description}, {style_prompt}, marketing image for: {product_description}, high quality, social media ready, 1024x1024"
+            # Remove social media references if for presentation
+            if for_presentation:
+                image_style_description = image_style_description.replace("Instagram post", "professional presentation")
+                image_style_description = image_style_description.replace("social media", "business presentation")
+            full_prompt = f"{image_style_description}, {style_prompt}, marketing image for: {product_description}{presentation_suffix}, 1024x1024"
         else:
-            full_prompt = f"{style_prompt} marketing image for: {product_description}, high quality, social media ready, 1024x1024"
+            full_prompt = f"{style_prompt} marketing image for: {product_description}{presentation_suffix}, 1024x1024"
         
         try:
             # Generate image using DALL-E 3
@@ -442,7 +550,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with examples, case studies, and best practices
 - Be comprehensive and cover all aspects of marketing strategy"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(marketing_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         return self.format_response(
             response=response_text,
@@ -586,7 +696,9 @@ IMPORTANT - Ask for clarification and more details:
 - Don't assume - ask for clarification when needed
 - If information is missing, explicitly ask for it before proceeding"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = context_data.get('sources', [])
         for web_result in web_results:

@@ -173,7 +173,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with strategic recommendations
 - Be comprehensive and cover all relevant aspects of the patent landscape"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         # Combine sources
         all_sources = patent_data.get('sources', [])
@@ -256,7 +258,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with legal reasoning and examples
 - Be comprehensive and cover all relevant aspects of patentability"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = patent_context.get('sources', [])
         for web_result in web_results:
@@ -331,7 +335,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with examples, case studies, and strategic insights
 - Be comprehensive and cover all relevant aspects of patent strategy"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = strategy_context.get('sources', [])
         for web_result in web_results:
@@ -409,7 +415,9 @@ When generating responses:
 - If asked for more details, provide extensive analysis with strategic recommendations
 - Be comprehensive and cover all relevant prior art"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(company_context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = prior_art_context.get('sources', [])
         for web_result in web_results:
@@ -480,7 +488,9 @@ IMPORTANT - Ask for clarification and more details:
 - Don't assume - ask for clarification when needed
 - If information is missing, explicitly ask for it before proceeding"""
         
-        response_text = self.generate_response(prompt, system_prompt=system_prompt)
+        # Extract company data for personalization
+        company_data = self._extract_company_data(context)
+        response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = context_data.get('sources', [])
         for web_result in web_results:
