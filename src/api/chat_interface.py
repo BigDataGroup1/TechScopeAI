@@ -26,7 +26,6 @@ from src.agents.marketing_agent import MarketingAgent
 from src.agents.team_agent import TeamAgent
 from src.agents.coordinator_agent import CoordinatorAgent
 from src.agents.supervisor_agent import SupervisorAgent
-from src.agents.team_agent import TeamAgent
 from src.rag.embedder import Embedder
 from src.rag.vector_store import VectorStore
 from src.rag.retriever import Retriever
@@ -487,7 +486,8 @@ def main():
                     try:
                         from PIL import Image
                         img = Image.open(image_path)
-                        st.image(img, caption="Generated Marketing Image", width='stretch')
+                        caption = "Generated Instagram Image - Ready to Post!" if message.get('image_generated') else "Generated Marketing Image"
+                        st.image(img, caption=caption, width='stretch')
                     except Exception as e:
                         st.warning(f"Could not display image: {e}")
             
@@ -790,6 +790,46 @@ def main():
                             # Regular text response
                             st.markdown(response.get('response', 'No response generated'))
                             
+                            # Check if Instagram content has generated image
+                            if response.get('image_generated'):
+                                if response.get('image_path'):
+                                    st.success("✅ Instagram image generated!")
+                                    
+                                    # Display image
+                                    image_path = response.get('image_path')
+                                    if image_path and Path(image_path).exists():
+                                        try:
+                                            from PIL import Image
+                                            img = Image.open(image_path)
+                                            st.image(img, caption="Generated Instagram Image - Ready to Post!", width='stretch')
+                                            
+                                            # Download button
+                                            with open(image_path, 'rb') as f:
+                                                st.download_button(
+                                                    "⬇ Download Image for Instagram",
+                                                    f,
+                                                    file_name=f"instagram_{Path(image_path).name}",
+                                                    mime="image/png"
+                                                )
+                                        except Exception as e:
+                                            st.error(f"Could not display image: {e}")
+                                            st.info(f"Image path: {image_path}")
+                                    else:
+                                        st.warning(f"Image file not found at: {response.get('image_path')}")
+                                    
+                                    # Show image prompt if available
+                                    if response.get('image_prompt'):
+                                        with st.expander("📝 Image Prompt Used"):
+                                            st.code(response.get('image_prompt'))
+                                    
+                                    # Show image URL if available
+                                    if response.get('image_url'):
+                                        st.info(f"Image URL: {response.get('image_url')}")
+                                else:
+                                    st.warning("⚠️ Image generation was attempted but no image path was returned. Check logs for details.")
+                            elif response.get('image_generated') is False:
+                                st.info("ℹ️ Image generation was not successful. You can still use the text content and manually create an image.")
+                            
                             # Show sources
                             if response.get('sources'):
                                 with st.expander("📚 Sources & Citations"):
@@ -797,11 +837,19 @@ def main():
                                         st.text(f"• {source.get('source', 'Unknown')} (similarity: {source.get('similarity', 0):.2f})")
                             
                             # Add to messages
-                            st.session_state.messages.append({
+                            message_content = {
                                 "role": "assistant",
                                 "content": response.get('response', ''),
                                 "sources": response.get('sources', [])
-                            })
+                            }
+                            
+                            # Include image info if available
+                            if response.get('image_generated'):
+                                message_content['image_generated'] = True
+                                message_content['image_path'] = response.get('image_path')
+                                message_content['image_url'] = response.get('image_url')
+                            
+                            st.session_state.messages.append(message_content)
                     
                 except Exception as e:
                     error_msg = f"❌ Error: {str(e)}"
