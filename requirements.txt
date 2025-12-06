@@ -17,3 +17,12 @@ newspaper3k>=0.2.8  # Article extraction
 lxml>=4.9.3  # XML/HTML parser
 python-dotenv>=1.0.0  # Environment variables
 
+# Data processing dependencies
+openpyxl>=3.1.2  # For reading XLSX files
+
+# RAG infrastructure dependencies
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
+pgvector>=0.2.4  # pgvector extension (for vector operations)
+sentence-transformers>=2.2.0  # Embedding generation
+tqdm>=4.65.0  # Progress bars
+
