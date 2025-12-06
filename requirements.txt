@@ -1,0 +1,28 @@
+# Dataset Downloader Dependencies
+kaggle>=1.5.16
+datasets>=2.14.0
+huggingface_hub>=0.16.0
+requests>=2.31.0
+pyyaml>=6.0.1
+pandas>=2.0.0
+
+# Optional: For better GitHub downloads
+gitpython>=3.1.40
+
+# New dependencies for unstructured data sources
+praw>=7.7.1  # Reddit API
+feedparser>=6.0.10  # RSS feeds
+beautifulsoup4>=4.12.2  # HTML parsing
+newspaper3k>=0.2.8  # Article extraction
+lxml>=4.9.3  # XML/HTML parser
+python-dotenv>=1.0.0  # Environment variables
+
+# Data processing dependencies
+openpyxl>=3.1.2  # For reading XLSX files
+
+# RAG infrastructure dependencies
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
+pgvector>=0.2.4  # pgvector extension (for vector operations)
+sentence-transformers>=2.2.0  # Embedding generation
+tqdm>=4.65.0  # Progress bars
+
