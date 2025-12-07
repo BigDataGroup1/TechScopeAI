@@ -138,7 +138,9 @@ class PitchExporter:
             return None
     
     def export_to_powerpoint(self, slides: List[Dict], company_name: str, 
-                           include_images: bool = True) -> Optional[str]:
+                           include_images: bool = True,
+                           use_gamma_style: bool = True,
+                           template: str = "modern") -> Optional[str]:
         """
         Export slides to PowerPoint format with professional styling.
         
@@ -146,10 +148,28 @@ class PitchExporter:
             slides: List of slide dictionaries
             company_name: Company name
             include_images: Whether to fetch and include images
+            use_gamma_style: Whether to use Gamma.ai-style engine (default: True)
+            template: Template name (modern, bold, corporate, startup)
             
         Returns:
             Path to created PowerPoint file
         """
+        # Use Gamma-style engine if requested
+        if use_gamma_style:
+            try:
+                from .gamma_ppt_engine import GammaPPTEngine
+                logger.info(f"Using Gamma-style PPT engine with template: {template}")
+                engine = GammaPPTEngine(template_name=template)
+                prs = engine.create_presentation(
+                    company_name=company_name,
+                    slides=slides,
+                    include_images=include_images,
+                    include_charts=True
+                )
+                return engine.save_presentation(prs, company_name, self.output_dir)
+            except Exception as e:
+                logger.warning(f"Gamma engine failed, falling back to standard: {e}")
+                # Fall through to standard implementation
         try:
             from pptx import Presentation
             from pptx.util import Inches, Pt

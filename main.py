@@ -219,17 +219,28 @@ def main():
         print("\n🤖 Initializing PitchAgent...")
         agent = initialize_agent()
         
-        # Ask user what to generate
+        # Ask user what to generate (with non-interactive fallback)
         print("\n📊 What would you like to generate?")
         print("  1. Full Pitch Deck (text)")
-        print("  2. Structured Slides")
-        choice = input("   Enter choice (1 or 2, default=1): ").strip() or "1"
+        print("  2. Structured Slides (with Gamma.ai-style PowerPoint)")
+        try:
+            choice = input("   Enter choice (1 or 2, default=2): ").strip() or "2"
+        except (EOFError, KeyboardInterrupt):
+            # Non-interactive mode - default to slides
+            print("   (Non-interactive mode: defaulting to Structured Slides)")
+            choice = "2"
         
         if choice == "2":
             # Generate slides
-            print("\n🎯 Generating structured slides...")
+            print("\n🎯 Generating structured slides with Gamma.ai-style engine...")
             print("   This may take a minute...\n")
             slides_data = agent.generate_slides(formatted_data)
+            
+            # Check if PowerPoint was auto-generated
+            pptx_path = slides_data.get('pptx_path')
+            if pptx_path:
+                print(f"\n✅ PowerPoint auto-generated: {pptx_path}")
+                print("   (Using Gamma.ai-style engine with smart layouts and charts)")
             
             print("\n" + "="*80)
             print(f"GENERATED PITCH DECK SLIDES ({slides_data.get('total_slides', 0)} slides)")
@@ -243,12 +254,17 @@ def main():
                     print("\nKey Points:")
                     for point in slide['key_points']:
                         print(f"  • {point}")
+                if slide.get('image_path'):
+                    print(f"\n🖼️  Image: {slide.get('image_path')}")
             
             print("\n" + "="*80)
             print("SOURCES:")
             for i, source in enumerate(slides_data.get('sources', [])[:5], 1):
                 print(f"  {i}. {source.get('source', 'Unknown')} (similarity: {source.get('similarity', 0):.2f})")
             print("="*80)
+            
+            if not pptx_path:
+                print("\n💡 Tip: PowerPoint will be auto-generated with Gamma.ai-style layouts!")
         else:
             # Generate full pitch
             print("\n🚀 Generating pitch deck...")

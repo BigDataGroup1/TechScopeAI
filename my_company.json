@@ -1,0 +1,22 @@
+{
+  "company_name": "Your Company Name",
+  "industry": "Your Industry (e.g., SaaS, Fintech, Healthcare)",
+  "founding_year": "2024",
+  "headquarters": "City, State, Country",
+  "current_stage": "Seed",
+  "problem": "Describe the problem you're solving in detail...",
+  "target_market": "Who are your target customers?",
+  "solution": "Describe your product/service solution...",
+  "key_features": "Feature 1, Feature 2, Feature 3",
+  "unique_value_proposition": "What makes you unique?",
+  "market_size": "TAM: $X billion, SAM: $Y billion, SOM: $Z million",
+  "traction": "MRR: $X, Customers: Y, Growth: Z%",
+  "revenue": "$X,XXX",
+  "customers": 100,
+  "funding_goal": "$X,XXX,XXX",
+  "funding_stage": "Seed",
+  "team_size": 5,
+  "founders": "Founder 1 (background), Founder 2 (background)",
+  "description": "Brief company description...",
+  "website": "https://yourwebsite.com"
+}

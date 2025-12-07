@@ -8,6 +8,14 @@ from pathlib import Path
 from .base_agent import BaseAgent
 from ..rag.retriever import Retriever
 
+# Real data integration
+try:
+    from ..integrations.real_data_layer import RealDataLayer
+    REAL_DATA_AVAILABLE = True
+except ImportError:
+    REAL_DATA_AVAILABLE = False
+    logger.warning("RealDataLayer not available")
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,6 +104,16 @@ class PitchAgent(BaseAgent):
             model: LLM model name
         """
         super().__init__("pitch", retriever, model=model)
+        
+        # Initialize real data layer if available
+        self.real_data_layer = None
+        if REAL_DATA_AVAILABLE:
+            try:
+                self.real_data_layer = RealDataLayer()
+                logger.info("Real data integration enabled for PitchAgent")
+            except Exception as e:
+                logger.warning(f"Could not initialize RealDataLayer: {e}")
+        
         logger.info("PitchAgent initialized")
     
     def generate_from_outline(self, outline: Dict, company_context: Optional[Dict] = None) -> Dict:
@@ -304,6 +322,29 @@ Be constructive, actionable, and specific. Reference the examples and best pract
         """
         logger.info(f"Generating slides for: {company_details.get('company_name', 'Unknown')}")
         
+        # Fetch real-time data if available
+        real_data_context = ""
+        if self.real_data_layer:
+            try:
+                company_name = company_details.get('company_name', '')
+                industry = company_details.get('industry', '')
+                
+                # Get competitor intelligence
+                competitor_data = self.real_data_layer.get_competitor_intelligence(
+                    company_name, industry
+                )
+                if competitor_data:
+                    real_data_context += f"\n\nREAL-TIME COMPETITOR DATA:\n{competitor_data}\n"
+                
+                # Get market trends
+                market_trends = self.real_data_layer.get_market_trends(industry)
+                if market_trends:
+                    real_data_context += f"\n\nREAL-TIME MARKET TRENDS:\n{market_trends}\n"
+                
+                logger.info("Real-time data integrated into pitch generation")
+            except Exception as e:
+                logger.warning(f"Could not fetch real-time data: {e}")
+        
         # Retrieve similar pitches and templates
         similar_pitches = self.retrieve_context(
             f"{company_details.get('industry', '')} {company_details.get('problem', '')}",
@@ -320,6 +361,8 @@ Be constructive, actionable, and specific. Reference the examples and best pract
 
 COMPANY DETAILS:
 {json.dumps(company_details, indent=2)}
+
+{real_data_context}
 
 SUCCESSFUL PITCH EXAMPLES:
 {similar_pitches.get('context', '')}

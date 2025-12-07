@@ -45,3 +45,12 @@ reportlab>=4.0.0  # PDF export
 python-pptx>=0.6.21  # PowerPoint export
 Pillow>=10.0.0  # Image processing for PowerPoint
 
+# Chart generation (for Gamma.ai features)
+matplotlib>=3.7.0  # For charts
+plotly>=5.17.0     # For interactive charts (optional)
+
+# Image processing enhancements
+Pillow>=10.0.0     # Already have
+
+# Additional utilities for new features
+python-dateutil>=2.8.2  # Date parsing

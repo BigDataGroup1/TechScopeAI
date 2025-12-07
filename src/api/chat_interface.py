@@ -51,18 +51,12 @@ def load_coordinator_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,
-            collection_names=["TechScopeAI_Competitive"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         agent = CoordinatorAgent(retriever)
         return agent, None
@@ -79,18 +73,12 @@ def load_supervisor_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,
-            collection_names=["TechScopeAI_Competitive"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Create supervisor
         supervisor = SupervisorAgent(retriever)
@@ -138,20 +126,12 @@ def load_pitch_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components
-        # Note: QueryAgent requires Weaviate Cloud, so for local instances we use manual RAG
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="pitch", dimension=dimension)
+        vector_store = VectorStore(category="pitch", dimension=dimension)
         
-        # Try QueryAgent first (will fallback to manual if local)
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Pitch"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Initialize agent
         agent = PitchAgent(retriever)
@@ -169,20 +149,12 @@ def load_competitive_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for competitive analysis
-        # Note: QueryAgent requires Weaviate Cloud, so for local instances we use manual RAG
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        # Try QueryAgent first (will fallback to manual if local)
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Initialize agent
         agent = CompetitiveAgent(retriever)
@@ -200,20 +172,12 @@ def load_patent_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for patent/IP
-        # Note: QueryAgent requires Weaviate Cloud, so for local instances we use manual RAG
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now, can create patent category later
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        # Try QueryAgent first (will fallback to manual if local)
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]  # Can create TechScopeAI_Patent later
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Initialize agent (has built-in web search fallback)
         agent = PatentAgent(retriever)
@@ -231,19 +195,12 @@ def load_policy_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for policy/compliance
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        # Try QueryAgent first (will fallback to manual if local)
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Initialize agent (has built-in web search fallback)
         agent = PolicyAgent(retriever)
@@ -261,19 +218,12 @@ def load_marketing_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for marketing
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        # Try QueryAgent first (will fallback to manual if local)
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Initialize agent (has built-in web search fallback and image generation)
         agent = MarketingAgent(retriever)
@@ -291,19 +241,12 @@ def load_team_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for team/hiring
+        # Initialize RAG components (use VectorStore for reliability)
         embedder = Embedder(use_openai=False)
         dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now
+        vector_store = VectorStore(category="competitive", dimension=dimension)
         
-        # Try QueryAgent first (will fallback to manual if local)
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
-        )
+        retriever = Retriever(vector_store, embedder)
         
         # Initialize agent (has built-in web search fallback)
         agent = TeamAgent(retriever)
@@ -351,6 +294,21 @@ def get_role_specific_questionnaire():
     """Get role-specific questionnaire questions."""
     from src.agents.team_agent import TeamAgent
     return TeamAgent.ROLE_SPECIFIC_QUESTIONNAIRE
+
+def get_team_questionnaire():
+    """Get team building questionnaire questions."""
+    from src.agents.team_agent import TeamAgent
+    return TeamAgent.TEAM_QUESTIONNAIRE
+
+def get_policy_questionnaire():
+    """Get policy questionnaire questions."""
+    from src.agents.policy_agent import PolicyAgent
+    return PolicyAgent.POLICY_QUESTIONNAIRE
+
+def get_competitive_questionnaire():
+    """Get competitive analysis questionnaire questions."""
+    from src.agents.competitive_agent import CompetitiveAgent
+    return CompetitiveAgent.COMPETITIVE_QUESTIONNAIRE
 
 
 def should_show_question(question, answers):
@@ -723,11 +681,44 @@ def main():
                             # Generate from company details
                             response = agent.generate_from_details(st.session_state.company_data)
                         else:
-                            # General query - try pitch agent first
-                            response = agent.process_query(
-                                query=prompt,
-                                context=st.session_state.company_data
-                            )
+                            # General query - check if we need more info
+                            context = st.session_state.company_data or {}
+                            
+                            # Ask follow-up questions if needed
+                            if not context and any(keyword in prompt_lower for keyword in ["generate", "create", "make", "build"]):
+                                # Suggest using questionnaire or providing company data
+                                response = {
+                                    "response": """I'd be happy to help! To give you the best results, I need a bit more information.
+
+**Option 1: Use Quick Actions**
+- Click one of the buttons above (e.g., "📝 Generate Pitch", "👥 Team & Hiring") to use guided questionnaires
+
+**Option 2: Provide Company Details**
+- Fill in your company details in the sidebar
+- Then ask me to generate what you need
+
+**Option 3: Ask a General Question**
+- I can answer questions about pitch decks, marketing, patents, policies, team building, etc.
+- Just ask me anything!
+
+What would you like to do?""",
+                                    "sources": []
+                                }
+                            else:
+                                # General query - try pitch agent first
+                                response = agent.process_query(
+                                    query=prompt,
+                                    context=context
+                                )
+                                
+                                # If response is too generic, ask follow-up
+                                if response.get('response') and len(response.get('response', '')) < 200:
+                                    # Response might be too short - ask for clarification
+                                    follow_up = f"\n\n💡 **To get more specific help, please:**\n"
+                                    follow_up += "- Provide more details about what you need\n"
+                                    follow_up += "- Use the specialized agent buttons above\n"
+                                    follow_up += "- Or ask a more specific question\n"
+                                    response['response'] = response.get('response', '') + follow_up
                         
                         # Check if this is an image generation response
                         if response.get('success') is not None and 'image_path' in response:
@@ -1351,6 +1342,376 @@ def main():
                     st.session_state.patent_questionnaire_active = False
                     st.session_state.patent_answers = {}
                     st.session_state.patent_question_index = 0
+                    st.rerun()
+    
+    # Team Questionnaire Flow
+    if "team_questionnaire_active" not in st.session_state:
+        st.session_state.team_questionnaire_active = False
+    if "team_answers" not in st.session_state:
+        st.session_state.team_answers = {}
+    if "team_question_index" not in st.session_state:
+        st.session_state.team_question_index = 0
+    
+    if st.session_state.team_questionnaire_active:
+        st.markdown("---")
+        st.subheader("👥 Team & Hiring Questionnaire")
+        
+        questionnaire = get_team_questionnaire()
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.team_answers)]
+        
+        if st.session_state.team_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.team_question_index]
+            
+            st.progress((st.session_state.team_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.team_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"team_q_{current_question['id']}"
+            answer = None
+            
+            if current_question['type'] == 'textarea':
+                answer = st.text_area("Your answer:", value=st.session_state.team_answers.get(current_question['id'], ''), height=150, key=answer_key, placeholder=current_question.get('placeholder', ''))
+            elif current_question['type'] == 'text':
+                answer = st.text_input("Your answer:", value=st.session_state.team_answers.get(current_question['id'], ''), key=answer_key, placeholder=current_question.get('placeholder', ''))
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.team_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                answer = st.selectbox("Select an option:", options=current_question['options'], index=default_index, key=answer_key)
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect("Select all that apply:", options=current_question['options'], default=st.session_state.team_answers.get(current_question['id'], []), key=answer_key)
+            
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.team_answers[current_question['id']] = answer
+                else:
+                    st.session_state.team_answers[current_question['id']] = answer
+            
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.team_question_index == 0, key=f"prev_{answer_key}"):
+                    st.session_state.team_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.team_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"cancel_{answer_key}"):
+                    st.session_state.team_questionnaire_active = False
+                    st.session_state.team_answers = {}
+                    st.session_state.team_question_index = 0
+                    st.rerun()
+        
+        else:
+            st.success("✅ All questions answered!")
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.team_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.team_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_analyze, col_restart = st.columns([3, 1])
+            
+            with col_analyze:
+                if st.button("👥 Analyze Team Needs", type="primary"):
+                    team_agent, team_error = load_team_agent()
+                    if team_error:
+                        st.error(f"Error: {team_error}")
+                    else:
+                        with st.spinner("Analyzing your team needs and generating recommendations..."):
+                            context = {**(st.session_state.company_data or {}), **st.session_state.team_answers}
+                            response = team_agent.analyze_team_needs(context, st.session_state.team_answers)
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response.get('response', ''),
+                                "sources": response.get('sources', [])
+                            })
+                            
+                            st.session_state.team_questionnaire_active = False
+                            st.session_state.team_answers = {}
+                            st.session_state.team_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.team_questionnaire_active = False
+                    st.session_state.team_answers = {}
+                    st.session_state.team_question_index = 0
+                    st.rerun()
+    
+    # Marketing Questionnaire Flow
+    if "marketing_questionnaire_active" not in st.session_state:
+        st.session_state.marketing_questionnaire_active = False
+    if "marketing_answers" not in st.session_state:
+        st.session_state.marketing_answers = {}
+    if "marketing_question_index" not in st.session_state:
+        st.session_state.marketing_question_index = 0
+    
+    if st.session_state.marketing_questionnaire_active:
+        st.markdown("---")
+        st.subheader("📱 Marketing Content Questionnaire")
+        
+        questionnaire = get_marketing_questionnaire()
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.marketing_answers)]
+        
+        if st.session_state.marketing_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.marketing_question_index]
+            
+            st.progress((st.session_state.marketing_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.marketing_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"marketing_q_{current_question['id']}"
+            answer = None
+            
+            if current_question['type'] == 'textarea':
+                answer = st.text_area("Your answer:", value=st.session_state.marketing_answers.get(current_question['id'], ''), height=150, key=answer_key, placeholder=current_question.get('placeholder', ''))
+            elif current_question['type'] == 'text':
+                answer = st.text_input("Your answer:", value=st.session_state.marketing_answers.get(current_question['id'], ''), key=answer_key, placeholder=current_question.get('placeholder', ''))
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.marketing_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                answer = st.selectbox("Select an option:", options=current_question['options'], index=default_index, key=answer_key)
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect("Select all that apply:", options=current_question['options'], default=st.session_state.marketing_answers.get(current_question['id'], []), key=answer_key)
+            
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.marketing_answers[current_question['id']] = answer
+                else:
+                    st.session_state.marketing_answers[current_question['id']] = answer
+            
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.marketing_question_index == 0, key=f"prev_{answer_key}"):
+                    st.session_state.marketing_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.marketing_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"cancel_{answer_key}"):
+                    st.session_state.marketing_questionnaire_active = False
+                    st.session_state.marketing_answers = {}
+                    st.session_state.marketing_question_index = 0
+                    st.rerun()
+        
+        else:
+            st.success("✅ All questions answered!")
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.marketing_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.marketing_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_analyze, col_restart = st.columns([3, 1])
+            
+            with col_analyze:
+                if st.button("📱 Generate Marketing Content", type="primary"):
+                    marketing_agent, marketing_error = load_marketing_agent()
+                    if marketing_error:
+                        st.error(f"Error: {marketing_error}")
+                    else:
+                        with st.spinner("Generating marketing content..."):
+                            context = {**(st.session_state.company_data or {}), **st.session_state.marketing_answers}
+                            
+                            # Generate content based on platform
+                            platforms = st.session_state.marketing_answers.get('platform', [])
+                            if 'Instagram' in platforms or 'Both' in platforms:
+                                response = marketing_agent.generate_instagram_content(context)
+                            elif 'LinkedIn' in platforms:
+                                response = marketing_agent.generate_linkedin_content(context)
+                            else:
+                                response = marketing_agent.process_query("Generate marketing content", context)
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response.get('response', ''),
+                                "sources": response.get('sources', []),
+                                "image_path": response.get('image_path'),
+                                "image_url": response.get('image_url'),
+                                "image_generated": response.get('image_generated', False)
+                            })
+                            
+                            st.session_state.marketing_questionnaire_active = False
+                            st.session_state.marketing_answers = {}
+                            st.session_state.marketing_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.marketing_questionnaire_active = False
+                    st.session_state.marketing_answers = {}
+                    st.session_state.marketing_question_index = 0
+                    st.rerun()
+    
+    # Policy Questionnaire Flow
+    if "policy_questionnaire_active" not in st.session_state:
+        st.session_state.policy_questionnaire_active = False
+    if "policy_answers" not in st.session_state:
+        st.session_state.policy_answers = {}
+    if "policy_question_index" not in st.session_state:
+        st.session_state.policy_question_index = 0
+    
+    if st.session_state.policy_questionnaire_active:
+        st.markdown("---")
+        st.subheader("📋 Policy & Compliance Questionnaire")
+        
+        questionnaire = get_policy_questionnaire()
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.policy_answers)]
+        
+        if st.session_state.policy_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.policy_question_index]
+            
+            st.progress((st.session_state.policy_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.policy_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"policy_q_{current_question['id']}"
+            answer = None
+            
+            if current_question['type'] == 'textarea':
+                answer = st.text_area("Your answer:", value=st.session_state.policy_answers.get(current_question['id'], ''), height=150, key=answer_key, placeholder=current_question.get('placeholder', ''))
+            elif current_question['type'] == 'text':
+                answer = st.text_input("Your answer:", value=st.session_state.policy_answers.get(current_question['id'], ''), key=answer_key, placeholder=current_question.get('placeholder', ''))
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.policy_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                answer = st.selectbox("Select an option:", options=current_question['options'], index=default_index, key=answer_key)
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect("Select all that apply:", options=current_question['options'], default=st.session_state.policy_answers.get(current_question['id'], []), key=answer_key)
+            
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.policy_answers[current_question['id']] = answer
+                else:
+                    st.session_state.policy_answers[current_question['id']] = answer
+            
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.policy_question_index == 0, key=f"prev_{answer_key}"):
+                    st.session_state.policy_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.policy_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"cancel_{answer_key}"):
+                    st.session_state.policy_questionnaire_active = False
+                    st.session_state.policy_answers = {}
+                    st.session_state.policy_question_index = 0
+                    st.rerun()
+        
+        else:
+            st.success("✅ All questions answered!")
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.policy_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.policy_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_analyze, col_restart = st.columns([3, 1])
+            
+            with col_analyze:
+                if st.button("📋 Generate Policy", type="primary"):
+                    policy_agent, policy_error = load_policy_agent()
+                    if policy_error:
+                        st.error(f"Error: {policy_error}")
+                    else:
+                        with st.spinner("Generating policy documents..."):
+                            context = {**(st.session_state.company_data or {}), **st.session_state.policy_answers}
+                            
+                            # Determine what to generate
+                            policy_type = st.session_state.policy_answers.get('policy_type', 'privacy')
+                            if 'privacy' in policy_type.lower():
+                                response = policy_agent.generate_privacy_policy(context)
+                            elif 'terms' in policy_type.lower() or 'tos' in policy_type.lower():
+                                response = policy_agent.generate_terms_of_service(context)
+                            else:
+                                response = policy_agent.process_query("Generate privacy policy", context)
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response.get('response', ''),
+                                "sources": response.get('sources', [])
+                            })
+                            
+                            st.session_state.policy_questionnaire_active = False
+                            st.session_state.policy_answers = {}
+                            st.session_state.policy_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.policy_questionnaire_active = False
+                    st.session_state.policy_answers = {}
+                    st.session_state.policy_question_index = 0
                     st.rerun()
     
     # Additional actions
