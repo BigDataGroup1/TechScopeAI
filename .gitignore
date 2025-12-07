@@ -205,3 +205,55 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# TechScope AI Project Specific
+# ===============================
+
+# Database backups and dumps (large files, contain sensitive data)
+*.dump
+*_backup.sql
+*_backup_*.sql
+techscope_backup*.sql
+techscope_backup*.dump
+
+# Cloud SQL Proxy binary (platform-specific, download separately)
+cloud_sql_proxy*
+cloud-sql-proxy*
+
+# GCP credentials and service account keys
+gcp-key*.json
+service-account*.json
+credentials.json
+application_default_credentials.json
+*-credentials.json
+*-key.json
+
+# Environment variables and secrets
+.env.local
+.env.production
+.env.development
+*.key
+*.pem
+*.p12
+
+# Temporary test files (keep test_*.py but ignore temp outputs)
+test_output/
+test_results/
+*.test.sql
+
+# Docker volumes and data
+docker-volumes/
+postgres-data/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE specific (uncomment if needed)
+# .vscode/
+# .idea/

@@ -5,10 +5,27 @@ from .huggingface_downloader import HuggingFaceDownloader
 from .github_downloader import GitHubDownloader
 from .mendeley_downloader import MendeleyDownloader
 from .web_scraper import WebScraper
-from .reddit_downloader import RedditDownloader
-from .hackernews_downloader import HackerNewsDownloader
-from .rss_downloader import RSSDownloader
-from .article_scraper import ArticleScraper
+
+# Optional downloaders - import only if available
+try:
+    from .reddit_downloader import RedditDownloader
+except ImportError:
+    RedditDownloader = None
+
+try:
+    from .hackernews_downloader import HackerNewsDownloader
+except ImportError:
+    HackerNewsDownloader = None
+
+try:
+    from .rss_downloader import RSSDownloader
+except ImportError:
+    RSSDownloader = None
+
+try:
+    from .article_scraper import ArticleScraper
+except ImportError:
+    ArticleScraper = None
 
 __all__ = [
     "KaggleDownloader",
@@ -21,5 +38,7 @@ __all__ = [
     "RSSDownloader",
     "ArticleScraper",
 ]
+
+
 
 

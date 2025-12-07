@@ -49,7 +49,7 @@ def load_config(config_path: str = "scripts/config/dataset_config.yaml") -> dict
     if not config_file.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
     
-    with open(config_file, 'r') as f:
+    with open(config_file, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
@@ -269,16 +269,16 @@ def download_all_datasets(config: dict, agent_filter: List[str] = None) -> Dict[
     mendeley_dl = MendeleyDownloader()
     web_scraper = WebScraper()
     
-    # Initialize new downloaders
+    # Initialize new downloaders (optional)
     try:
-        reddit_dl = RedditDownloader()
+        reddit_dl = RedditDownloader() if RedditDownloader else None
     except Exception as e:
         logger.warning(f"Reddit downloader not available: {e}")
         reddit_dl = None
     
-    hackernews_dl = HackerNewsDownloader()
-    rss_dl = RSSDownloader()
-    article_scraper = ArticleScraper()
+    hackernews_dl = HackerNewsDownloader() if HackerNewsDownloader else None
+    rss_dl = RSSDownloader() if RSSDownloader else None
+    article_scraper = ArticleScraper() if ArticleScraper else None
     
     # Process each agent category
     for agent_name, datasets in config['datasets'].items():
@@ -322,11 +322,23 @@ def download_all_datasets(config: dict, agent_filter: List[str] = None) -> Dict[
                         logger.error("Reddit downloader not available. Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET")
                         success = False
                 elif source == 'hackernews':
-                    success = download_hackernews_dataset(dataset_config, hackernews_dl)
+                    if hackernews_dl:
+                        success = download_hackernews_dataset(dataset_config, hackernews_dl)
+                    else:
+                        logger.error("HackerNews downloader not available")
+                        success = False
                 elif source == 'rss':
-                    success = download_rss_dataset(dataset_config, rss_dl)
+                    if rss_dl:
+                        success = download_rss_dataset(dataset_config, rss_dl)
+                    else:
+                        logger.error("RSS downloader not available. Install feedparser: pip install feedparser")
+                        success = False
                 elif source == 'article':
-                    success = download_article_dataset(dataset_config, article_scraper)
+                    if article_scraper:
+                        success = download_article_dataset(dataset_config, article_scraper)
+                    else:
+                        logger.error("Article scraper not available. Install newspaper3k: pip install newspaper3k")
+                        success = False
                 else:
                     logger.error(f"Unknown source: {source}")
                     success = False
