@@ -148,3 +148,5 @@ Write-Host "Note: Index creation runs on Cloud SQL server." -ForegroundColor Cya
 Write-Host "Even if this script finishes, indexes may still be building." -ForegroundColor Cyan
 Write-Host "Check status with: .\src\scripts\db\check_what_exists.ps1" -ForegroundColor White
 
+
+
