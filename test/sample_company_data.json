@@ -1,0 +1,22 @@
+{
+  "company_name": "LexiGuard AI",
+  "industry": "Legal AI / Compliance Automation",
+  "founding_year": "2024",
+  "headquarters": "Boston, MA, USA",
+  "current_stage": "Seed",
+  "problem": "SMBs struggle with contract creation, compliance tracking, and legal risk mitigation due to high legal costs and slow manual workflows.",
+  "target_market": "Small & Medium Businesses (SMBs), HR Teams, SaaS Platforms, Finance & Procurement Teams",
+  "solution": "AI-driven contract automation and compliance intelligence platform that drafts, reviews, and monitors legal documents in real time.",
+  "key_features": "AI contract drafting, automatic clause detection, risk scoring, compliance monitoring, e-sign integrations, smart contract templates, GDPR/CCPA readiness reports",
+  "unique_value_proposition": "First legal AI platform combining autonomous contract drafting with live compliance intelligence tailored specifically for SMBs.",
+  "market_size": "TAM: 45 billion USD (LegalTech), SAM: 6.5 billion USD",
+  "traction": "MRR: $32,000, Customers: 120",
+  "revenue": "$32,000",
+  "customers": 120,
+  "funding_goal": "$2,000,000",
+  "funding_stage": "Seed",
+  "team_size": 12,
+  "founders": "Emily Carter (former GC at a fintech), Arjun Mehta (ex-Google AI Lead)",
+  "description": "LexiGuard AI is an autonomous legal assistant for SMBs, offering contract generation, legal risk alerts, and compliance oversight.",
+  "website": "https://www.lexiguard.ai"
+}

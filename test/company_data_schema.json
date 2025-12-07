@@ -1,0 +1,219 @@
+{
+  "description": "Schema for company signup data - all fields that should be collected",
+  "version": "1.0",
+  "fields": {
+    "basic_info": {
+      "company_name": "string (required)",
+      "legal_name": "string (optional)",
+      "website": "string (optional, URL)",
+      "founded_date": "string (required, ISO date)",
+      "headquarters_location": "string (required)",
+      "timezone": "string (optional)",
+      "company_stage": "enum (required): Pre-Seed, Seed, Series A, Series B, Series C+",
+      "industry": "string (required)",
+      "sub_industry": "string (optional)",
+      "company_description": "string (required, max 500 chars)"
+    },
+    
+    "problem": {
+      "problem_statement": "string (required, max 1000 chars)",
+      "target_audience": "string (required)",
+      "pain_points": "array of strings (required, min 2)",
+      "current_solutions_used": "array of strings (optional)",
+      "why_current_solutions_fail": "string (optional)"
+    },
+    
+    "solution": {
+      "solution_description": "string (required, max 1000 chars)",
+      "key_features": "array of strings (required, min 3)",
+      "unique_value_proposition": "string (required, max 500 chars)",
+      "technology_stack": "array of strings (optional)",
+      "product_status": "enum: Idea, MVP, Beta, Launched",
+      "demo_url": "string (optional, URL)",
+      "product_screenshots": "array of URLs (optional)"
+    },
+    
+    "market": {
+      "target_market": "string (required)",
+      "market_size": {
+        "tam": "string (optional)",
+        "sam": "string (optional)",
+        "som": "string (optional)"
+      },
+      "target_customer_profile": {
+        "company_size": "string (optional)",
+        "industry": "string (optional)",
+        "geography": "string (optional)",
+        "budget_range": "string (optional)"
+      },
+      "market_trends": "array of strings (optional)",
+      "market_growth_rate": "string (optional)",
+      "competitor_analysis": {
+        "direct_competitors": "array of objects (optional)",
+        "competitive_advantage": "string (required)"
+      }
+    },
+    
+    "business_model": {
+      "revenue_model": "string (required)",
+      "pricing_tiers": "array of objects (optional)",
+      "customer_acquisition_channels": "array of strings (optional)",
+      "unit_economics": {
+        "cac": "string (optional)",
+        "ltv": "string (optional)",
+        "ltv_cac_ratio": "string (optional)",
+        "payback_period": "string (optional)"
+      },
+      "sales_cycle": "string (optional)"
+    },
+    
+    "traction": {
+      "current_metrics": {
+        "mrr": "string (optional)",
+        "arr": "string (optional)",
+        "paying_customers": "number (optional)",
+        "free_users": "number (optional)",
+        "conversion_rate": "string (optional)",
+        "churn_rate": "string (optional)",
+        "mrr_growth_rate": "string (optional)"
+      },
+      "key_achievements": "array of strings (optional)",
+      "customer_testimonials": "array of objects (optional)",
+      "case_studies": "array of objects (optional)"
+    },
+    
+    "team": {
+      "founders": "array of objects (required, min 1)",
+      "team_size": "number (optional)",
+      "team_breakdown": "object (optional)",
+      "key_hires_needed": "array of strings (optional)",
+      "advisors": "array of objects (optional)"
+    },
+    
+    "funding": {
+      "current_stage": "string (required)",
+      "funding_history": "array of objects (optional)",
+      "funding_goal": "string (optional)",
+      "funding_stage": "string (optional)",
+      "use_of_funds": "object (optional)",
+      "funding_timeline": "string (optional)",
+      "investor_targets": "array of strings (optional)",
+      "previous_investors": "array of strings (optional)",
+      "runway_months": "number (optional)"
+    },
+    
+    "go_to_market": {
+      "launch_strategy": "string (optional)",
+      "marketing_channels": "array of strings (optional)",
+      "sales_strategy": "string (optional)",
+      "partnerships": "array of objects (optional)",
+      "customer_support": "string (optional)"
+    },
+    
+    "product_roadmap": {
+      "q1_2024": "array of strings (optional)",
+      "q2_2024": "array of strings (optional)",
+      "q3_2024": "array of strings (optional)"
+    },
+    
+    "risks_and_challenges": {
+      "technical_risks": "array of strings (optional)",
+      "market_risks": "array of strings (optional)",
+      "team_risks": "array of strings (optional)",
+      "mitigation_strategies": "array of strings (optional)"
+    },
+    
+    "milestones": {
+      "completed": "array of strings (optional)",
+      "upcoming": "array of strings (optional)"
+    },
+    
+    "additional_info": {
+      "patents": "array of strings (optional)",
+      "intellectual_property": "string (optional)",
+      "regulatory_compliance": "array of strings (optional)",
+      "awards_and_recognition": "array of strings (optional)",
+      "press_mentions": "array of strings (optional)",
+      "social_media": "object (optional)"
+    },
+    
+    "preferences": {
+      "communication_preference": "string (optional)",
+      "newsletter_subscription": "boolean (optional)",
+      "data_sharing_consent": "boolean (required)",
+      "terms_accepted": "boolean (required)",
+      "privacy_policy_accepted": "boolean (required)"
+    }
+  },
+  
+  "required_fields": [
+    "basic_info.company_name",
+    "basic_info.founded_date",
+    "basic_info.headquarters_location",
+    "basic_info.company_stage",
+    "basic_info.industry",
+    "basic_info.company_description",
+    "problem.problem_statement",
+    "problem.target_audience",
+    "problem.pain_points",
+    "solution.solution_description",
+    "solution.key_features",
+    "solution.unique_value_proposition",
+    "market.target_market",
+    "market.competitor_analysis.competitive_advantage",
+    "business_model.revenue_model",
+    "team.founders",
+    "funding.current_stage",
+    "preferences.data_sharing_consent",
+    "preferences.terms_accepted",
+    "preferences.privacy_policy_accepted"
+  ],
+  
+  "signup_flow_suggestions": {
+    "step_1_basic": [
+      "company_name",
+      "industry",
+      "company_stage",
+      "headquarters_location",
+      "company_description"
+    ],
+    "step_2_problem": [
+      "problem_statement",
+      "target_audience",
+      "pain_points"
+    ],
+    "step_3_solution": [
+      "solution_description",
+      "key_features",
+      "unique_value_proposition",
+      "product_status"
+    ],
+    "step_4_market": [
+      "target_market",
+      "competitive_advantage"
+    ],
+    "step_5_business": [
+      "revenue_model",
+      "pricing_tiers"
+    ],
+    "step_6_traction": [
+      "current_metrics (if available)",
+      "key_achievements"
+    ],
+    "step_7_team": [
+      "founders",
+      "team_size"
+    ],
+    "step_8_funding": [
+      "current_stage",
+      "funding_goal",
+      "funding_timeline"
+    ],
+    "step_9_preferences": [
+      "terms_accepted",
+      "privacy_policy_accepted",
+      "newsletter_subscription"
+    ]
+  }
+}
+
