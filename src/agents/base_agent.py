@@ -16,17 +16,30 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
-# Try to import PersonalizationAgent
+# Try to import PersonalizationAgent (Weaviate Agents - separate from RAG)
+# Note: RAG uses PostgreSQL, but agents use Weaviate for personalization
 try:
     import weaviate
-    from weaviate.agents.personalize import PersonalizationAgent
-    PERSONALIZATION_AGENT_AVAILABLE = True
+    try:
+        # Correct import path for weaviate-agents v1.1.0+
+        from weaviate_agents.personalization import PersonalizationAgent
+        PERSONALIZATION_AGENT_AVAILABLE = True
+    except (ImportError, AttributeError) as e:
+        # Weaviate agents not installed or wrong version - agents will work without personalization
+        PERSONALIZATION_AGENT_AVAILABLE = False
 except ImportError:
     PERSONALIZATION_AGENT_AVAILABLE = False
 
 from ..rag.retriever import Retriever
+from ..mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
+
+# Log status after logger is defined
+if PERSONALIZATION_AGENT_AVAILABLE:
+    logger.debug("✅ PersonalizationAgent imported successfully")
+else:
+    logger.warning("Weaviate Agents PersonalizationAgent not available. Agents will work without personalization features.")
 
 
 class BaseAgent(ABC):
@@ -57,6 +70,9 @@ class BaseAgent(ABC):
             raise ImportError("openai package required. Install with: pip install openai")
         
         self.client = OpenAI(api_key=api_key)
+        
+        # Initialize MCP client for tools (web search, image search, etc.)
+        self.mcp_client = MCPClient()
         
         # Initialize PersonalizationAgent if available (for Weaviate Cloud)
         self.personalization_agent = None

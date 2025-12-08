@@ -15,12 +15,12 @@ class SupervisorAgent(BaseAgent):
     # Agent registry with keywords for routing
     AGENT_REGISTRY = {
         "pitch": {
-            "keywords": ["pitch", "deck", "presentation", "elevator", "investor", "funding", "raise"],
-            "description": "Generates pitch decks and elevator pitches"
+            "keywords": ["pitch", "deck", "presentation", "elevator", "pitch deck", "pitch presentation", "raise capital", "funding deck", "investor pitch"],
+            "description": "Generates pitch decks and elevator pitches for your startup"
         },
         "competitive": {
-            "keywords": ["competitor", "competitive", "market analysis", "competition", "rival"],
-            "description": "Analyzes competitors and market positioning"
+            "keywords": ["competitor", "competitive", "market analysis", "competition", "rival", "startup news", "funding rounds", "acquisitions", "market trends"],
+            "description": "Analyzes competitors, market positioning, and startup industry news"
         },
         "marketing": {
             "keywords": ["marketing", "instagram", "linkedin", "social media", "content", "campaign", "post", "hashtag"],
@@ -82,6 +82,14 @@ class SupervisorAgent(BaseAgent):
         
         query_lower = query.lower()
         
+        # Check for news/research queries that should go to competitive agent
+        news_indicators = ["news", "recent", "latest", "happened", "this week", "this month", "today", "current", "what are", "find me", "search for"]
+        is_news_query = any(indicator in query_lower for indicator in news_indicators)
+        
+        # Check for pitch-specific queries
+        pitch_indicators = ["generate", "create", "make", "build", "my pitch", "my deck", "for my", "help me"]
+        is_pitch_query = any(indicator in query_lower for indicator in pitch_indicators)
+        
         # Calculate scores for each agent
         agent_scores = {}
         for agent_name, agent_info in self.AGENT_REGISTRY.items():
@@ -97,11 +105,21 @@ class SupervisorAgent(BaseAgent):
                 if keyword in query_lower:
                     score += 0.1
             
+            # Special handling for news queries
+            if is_news_query and agent_name == "competitive":
+                score += 0.5  # Boost competitive agent for news queries
+            elif is_news_query and agent_name == "pitch":
+                score -= 0.3  # Reduce pitch agent score for news queries
+            
+            # Special handling for pitch generation queries
+            if is_pitch_query and agent_name == "pitch":
+                score += 0.4  # Boost pitch agent for generation queries
+            
             agent_scores[agent_name] = score
         
-        # Use LLM for better routing if scores are close
-        if max(agent_scores.values()) < 0.3:
-            # Fallback to LLM routing
+        # Use LLM for better routing if scores are close or ambiguous
+        if max(agent_scores.values()) < 0.3 or (is_news_query and agent_scores.get("pitch", 0) > agent_scores.get("competitive", 0)):
+            # Fallback to LLM routing for ambiguous cases
             return self._llm_route_query(query, context)
         
         # Get best match
@@ -129,9 +147,24 @@ Query: {query}
 Available Agents:
 {agent_descriptions}
 
+Routing Guidelines:
+- "pitch" agent: For generating, creating, or improving YOUR OWN pitch deck
+- "competitive" agent: For news, research, market analysis, or information about OTHER startups/companies
+- "marketing" agent: For creating marketing content, social media posts
+- "patent" agent: For patent research, IP questions
+- "policy" agent: For legal policies, compliance
+- "team" agent: For hiring, job descriptions, team building
+
+Examples:
+- "Generate a pitch deck" → pitch
+- "What startup funding rounds happened?" → competitive (news/research)
+- "Find recent acquisitions" → competitive (news/research)
+- "Create Instagram content" → marketing
+- "Search for patents" → patent
+
 Return only the agent name (one word) that should handle this query."""
         
-        system_prompt = "You are a query router. Select the most appropriate agent for the query."
+        system_prompt = "You are a query router. Select the most appropriate agent for the query. Distinguish between queries about the user's own startup (pitch agent) vs. news/research about other companies (competitive agent)."
         
         try:
             response = self.generate_response(prompt, system_prompt=system_prompt)

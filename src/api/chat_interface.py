@@ -51,17 +51,15 @@ def load_coordinator_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,
-            collection_names=["TechScopeAI_Competitive"]
+            embedder=embedder
         )
         
         agent = CoordinatorAgent(retriever)
@@ -79,17 +77,15 @@ def load_supervisor_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,
-            collection_names=["TechScopeAI_Competitive"]
+            embedder=embedder
         )
         
         # Create supervisor
@@ -138,19 +134,15 @@ def load_pitch_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components
-        # Note: QueryAgent requires Weaviate Cloud, so for local instances we use manual RAG
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="pitch", dimension=dimension)
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
-        # Try QueryAgent first (will fallback to manual if local)
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Pitch"]
+            embedder=embedder
         )
         
         # Initialize agent
@@ -169,19 +161,15 @@ def load_competitive_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for competitive analysis
-        # Note: QueryAgent requires Weaviate Cloud, so for local instances we use manual RAG
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
-        # Try QueryAgent first (will fallback to manual if local)
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
+            embedder=embedder
         )
         
         # Initialize agent
@@ -200,19 +188,15 @@ def load_patent_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for patent/IP
-        # Note: QueryAgent requires Weaviate Cloud, so for local instances we use manual RAG
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now, can create patent category later
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
-        # Try QueryAgent first (will fallback to manual if local)
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]  # Can create TechScopeAI_Patent later
+            embedder=embedder
         )
         
         # Initialize agent (has built-in web search fallback)
@@ -231,18 +215,15 @@ def load_policy_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for policy/compliance
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
-        # Try QueryAgent first (will fallback to manual if local)
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
+            embedder=embedder
         )
         
         # Initialize agent (has built-in web search fallback)
@@ -261,18 +242,15 @@ def load_marketing_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for marketing
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
-        # Try QueryAgent first (will fallback to manual if local)
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
+            embedder=embedder
         )
         
         # Initialize agent (has built-in web search fallback and image generation)
@@ -291,18 +269,15 @@ def load_team_agent():
         if not api_key:
             return None, "OPENAI_API_KEY not found in environment. Add it to .env file"
         
-        # Initialize RAG components for team/hiring
+        # Initialize RAG components (PostgreSQL for RAG, Weaviate agents separate)
         embedder = Embedder(use_openai=False)
-        dimension = embedder.get_embedding_dimension()
-        from src.rag.weaviate_store import WeaviateStore
-        vector_store = WeaviateStore(category="competitive", dimension=dimension)  # Use competitive for now
+        embedding_model = embedder.get_embedding_model()
+        # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+        vector_store = VectorStore(embedding_model=embedding_model)
         
-        # Try QueryAgent first (will fallback to manual if local)
         retriever = Retriever(
             vector_store=vector_store,
-            embedder=embedder,
-            use_query_agent=True,  # Will auto-detect local and fallback
-            collection_names=["TechScopeAI_Competitive"]
+            embedder=embedder
         )
         
         # Initialize agent (has built-in web search fallback)
@@ -408,6 +383,82 @@ def main():
     with st.sidebar:
         st.header("📋 Company Details")
         
+        # Database Connection Status
+        st.markdown("---")
+        st.subheader("🔌 Database Status")
+        try:
+            from src.rag.db_config import get_database_url
+            from src.rag.vector_store import VectorStore
+            from src.rag.embeddings import EmbeddingModel
+            import os
+            
+            # Check if Cloud SQL password is set (indicates Cloud SQL is default)
+            cloud_password = os.getenv("CLOUD_SQL_PASSWORD")
+            cloud_host = os.getenv("CLOUD_SQL_HOST", "localhost")
+            cloud_port = os.getenv("CLOUD_SQL_PORT", "5433")
+            
+            # Get database URL to check connection type
+            db_url = get_database_url()
+            
+            # Detect connection type
+            is_cloud = (
+                cloud_password is not None or  # Cloud SQL password set
+                ":5433" in db_url or  # Cloud SQL proxy port
+                "/cloudsql/" in db_url or  # Cloud SQL socket path
+                "cloudsql" in db_url.lower()
+            )
+            is_local = ":5432" in db_url and not is_cloud
+            
+            if is_cloud:
+                st.success("✅ **Cloud SQL** (GCP)")
+                conn_info = db_url.split('@')[-1] if '@' in db_url else f"{cloud_host}:{cloud_port}"
+                st.caption(f"📍 {conn_info}")
+                
+                # Test connection and show collection counts
+                try:
+                    embedding_model = EmbeddingModel()
+                    test_vs = VectorStore(embedding_model=embedding_model)
+                    conn = test_vs._get_connection()
+                    test_vs._put_connection(conn)
+                    
+                    # Get collection counts
+                    collections = ['competitors_corpus', 'marketing_corpus', 'ip_policy_corpus', 
+                                 'policy_corpus', 'job_roles_corpus', 'pitch_examples_corpus']
+                    total_docs = 0
+                    collection_counts = {}
+                    for coll in collections:
+                        try:
+                            count = test_vs.get_collection_count(coll)
+                            total_docs += count
+                            if count > 0:
+                                collection_counts[coll.replace('_corpus', '')] = count
+                        except:
+                            pass
+                    
+                    if total_docs > 0:
+                        st.caption(f"📊 **{total_docs:,}** documents indexed")
+                        if collection_counts:
+                            coll_list = ", ".join([f"{k}: {v:,}" for k, v in list(collection_counts.items())[:3]])
+                            st.caption(f"   ({coll_list})")
+                    else:
+                        st.caption("⚠️ No documents indexed yet")
+                    st.caption("✅ Connection active")
+                except Exception as e:
+                    st.warning(f"⚠️ Connection test failed")
+                    st.caption(f"   {str(e)[:60]}...")
+            elif is_local:
+                st.warning("⚠️ **Local PostgreSQL**")
+                conn_info = db_url.split('@')[-1] if '@' in db_url else "localhost:5432"
+                st.caption(f"📍 {conn_info}")
+                st.caption("💡 Set CLOUD_SQL_PASSWORD in .env to use Cloud SQL")
+            else:
+                st.info(f"🔗 **Custom Connection**")
+                conn_info = db_url.split('@')[-1] if '@' in db_url else "Custom"
+                st.caption(f"📍 {conn_info}")
+        except Exception as e:
+            st.error(f"❌ Status check failed")
+            st.caption(f"   {str(e)[:60]}...")
+        
         # Supervisor toggle (for debugging)
         st.markdown("---")
         st.subheader("⚙️ Settings")
@@ -492,9 +543,56 @@ def main():
                         st.warning(f"Could not display image: {e}")
             
             if "sources" in message and message["sources"]:
-                with st.expander("📚 Sources"):
-                    for source in message["sources"][:3]:  # Show top 3 sources
-                        st.text(f"• {source.get('source', 'Unknown')} (similarity: {source.get('similarity', 0):.2f})")
+                # Determine if sources include web search results
+                has_web_search = any(source.get('is_web_search', False) for source in message["sources"])
+                source_label = "📚 Sources" + (" (Cloud SQL + Web Search)" if has_web_search else " (from Cloud SQL)")
+                
+                with st.expander(source_label):
+                    for i, source in enumerate(message["sources"][:5], 1):  # Show top 5 sources
+                        source_name = source.get('source', 'Unknown')
+                        source_title = source.get('title', '')
+                        snippet = source.get('snippet', '')
+                        similarity = source.get('similarity', 0)
+                        metadata = source.get('metadata', {})
+                        is_web_search = source.get('is_web_search', False)
+                        
+                        # Display title or source name
+                        if source_title:
+                            display_title = source_title
+                        else:
+                            display_title = source_name
+                        
+                        # Show collection name if available in metadata (for RAG sources)
+                        collection_hint = ""
+                        if isinstance(metadata, dict) and not is_web_search:
+                            if any(coll in source_name.lower() for coll in ['corpus', 'competitor', 'marketing', 'pitch', 'policy', 'job', 'ip']):
+                                collection_hint = f" [{source_name}]"
+                            elif 'agent' in metadata:
+                                collection_hint = f" [{metadata.get('agent', '')}_corpus]"
+                        
+                        # Display source with clickable link if it's a URL
+                        if is_web_search and source_name.startswith('http'):
+                            st.markdown(f"**{i}.** [{display_title}]({source_name})")
+                        else:
+                            st.markdown(f"**{i}.** {display_title}{collection_hint}")
+                        
+                        # Show snippet if available (for web search results)
+                        if snippet and is_web_search:
+                            st.markdown(f"   *{snippet[:200]}{'...' if len(snippet) > 200 else ''}*")
+                            st.markdown(f"   🔗 [View full article]({source_name})")
+                        elif source_name.startswith('http') and not is_web_search:
+                            st.markdown(f"   🔗 [View source]({source_name})")
+                        
+                        # Show similarity and source type
+                        if similarity > 0:
+                            source_type = "Web Search" if is_web_search else "Cloud SQL"
+                            st.caption(f"   Similarity: {similarity:.3f} | {source_type}")
+                        else:
+                            source_type = "Web Search" if is_web_search else "Cloud SQL Collection"
+                            st.caption(f"   {source_type}")
+                        
+                        if metadata.get('source') and not is_web_search:
+                            st.caption(f"   Original source: {metadata.get('source', 'N/A')}")
     
     # Chat input
     if prompt := st.chat_input("Ask about pitch decks, patents, competitors, or generate a pitch..."):
@@ -573,9 +671,35 @@ def main():
                                     # Show sources
                                     sources = response.get("sources", [])
                                     if sources:
-                                        with st.expander("📚 Sources"):
-                                            for source in sources[:5]:
-                                                st.markdown(f"- {source.get('source', 'Unknown')}")
+                                        has_web_search = any(s.get('is_web_search', False) for s in sources)
+                                        source_label = "📚 Sources" + (" (Cloud SQL + Web Search)" if has_web_search else " (from Cloud SQL)")
+                                        
+                                        with st.expander(source_label):
+                                            for i, source in enumerate(sources[:5], 1):
+                                                source_name = source.get('source', 'Unknown')
+                                                source_title = source.get('title', '')
+                                                snippet = source.get('snippet', '')
+                                                similarity = source.get('similarity', 0)
+                                                metadata = source.get('metadata', {})
+                                                is_web_search = source.get('is_web_search', False)
+                                                
+                                                display_title = source_title if source_title else source_name
+                                                
+                                                if is_web_search and source_name.startswith('http'):
+                                                    st.markdown(f"**{i}.** [{display_title}]({source_name})")
+                                                else:
+                                                    st.markdown(f"**{i}.** {display_title}")
+                                                
+                                                if snippet and is_web_search:
+                                                    st.markdown(f"   *{snippet[:200]}{'...' if len(snippet) > 200 else ''}*")
+                                                    st.markdown(f"   🔗 [View full article]({source_name})")
+                                                
+                                                if similarity > 0:
+                                                    source_type = "Web Search" if is_web_search else "Cloud SQL"
+                                                    st.caption(f"   Similarity: {similarity:.3f} | {source_type}")
+                                                else:
+                                                    source_type = "Web Search" if is_web_search else "Cloud SQL Collection"
+                                                    st.caption(f"   {source_type}")
                                     
                                     st.session_state.messages.append({
                                         "role": "assistant",
@@ -832,9 +956,36 @@ def main():
                             
                             # Show sources
                             if response.get('sources'):
-                                with st.expander("📚 Sources & Citations"):
-                                    for source in response['sources'][:5]:
-                                        st.text(f"• {source.get('source', 'Unknown')} (similarity: {source.get('similarity', 0):.2f})")
+                                sources = response.get('sources', [])
+                                has_web_search = any(s.get('is_web_search', False) for s in sources)
+                                source_label = "📚 Sources & Citations" + (" (Cloud SQL + Web Search)" if has_web_search else " (from Cloud SQL)")
+                                
+                                with st.expander(source_label):
+                                    for i, source in enumerate(sources[:5], 1):
+                                        source_name = source.get('source', 'Unknown')
+                                        source_title = source.get('title', '')
+                                        snippet = source.get('snippet', '')
+                                        similarity = source.get('similarity', 0)
+                                        metadata = source.get('metadata', {})
+                                        is_web_search = source.get('is_web_search', False)
+                                        
+                                        display_title = source_title if source_title else source_name
+                                        
+                                        if is_web_search and source_name.startswith('http'):
+                                            st.markdown(f"**{i}.** [{display_title}]({source_name})")
+                                        else:
+                                            st.markdown(f"**{i}.** {display_title}")
+                                        
+                                        if snippet and is_web_search:
+                                            st.markdown(f"   *{snippet[:200]}{'...' if len(snippet) > 200 else ''}*")
+                                            st.markdown(f"   🔗 [View full article]({source_name})")
+                                        
+                                        if similarity > 0:
+                                            source_type = "Web Search" if is_web_search else "Cloud SQL"
+                                            st.caption(f"   Similarity: {similarity:.3f} | {source_type}")
+                                        else:
+                                            source_type = "Web Search" if is_web_search else "Cloud SQL Collection"
+                                            st.caption(f"   {source_type}")
                             
                             # Add to messages
                             message_content = {

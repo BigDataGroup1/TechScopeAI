@@ -2,6 +2,8 @@
 PostgreSQL + pgvector vector store wrapper.
 
 Manages PostgreSQL database with pgvector extension for storing and querying embeddings.
+
+Defaults to Cloud SQL connection. Local connection only when explicitly requested.
 """
 
 import logging
@@ -15,6 +17,7 @@ from psycopg2.pool import ThreadedConnectionPool
 import numpy as np
 
 from .embeddings import EmbeddingModel
+from .db_config import get_database_url
 
 logger = logging.getLogger(__name__)
 
@@ -26,31 +29,29 @@ class VectorStore:
         self,
         database_url: Optional[str] = None,
         embedding_model: Optional[EmbeddingModel] = None,
-        pool_size: int = 5
+        pool_size: int = 5,
+        use_local: bool = False
     ):
         """
         Initialize the vector store.
         
         Args:
-            database_url: PostgreSQL connection URL (default: from DATABASE_URL env var)
+            database_url: PostgreSQL connection URL (overrides all other settings)
             embedding_model: Optional embedding model for custom embeddings
             pool_size: Connection pool size
+            use_local: If True, use local PostgreSQL (localhost:5432). 
+                      If False (default), use Cloud SQL via CLOUD_SQL_PASSWORD.
+                      Ignored if database_url is provided.
         """
         self.embedding_model = embedding_model
         
-        # Get database URL from parameter or environment
-        if database_url is None:
-            database_url = os.getenv("DATABASE_URL")
-            if database_url is None:
-                # Default local connection
-                database_url = "postgresql://postgres:postgres@localhost:5432/techscope"
-        
-        self.database_url = database_url
+        # Get database URL - defaults to Cloud SQL unless use_local=True
+        self.database_url = get_database_url(use_local=use_local, database_url=database_url)
         
         # Initialize connection pool
         try:
-            self.pool = ThreadedConnectionPool(1, pool_size, dsn=database_url)
-            logger.info(f"PostgreSQL connected: {database_url.split('@')[-1] if '@' in database_url else 'local'}")
+            self.pool = ThreadedConnectionPool(1, pool_size, dsn=self.database_url)
+            logger.info(f"PostgreSQL connected: {self.database_url.split('@')[-1] if '@' in self.database_url else 'local'}")
             
             # Ensure pgvector extension is enabled
             self._ensure_pgvector_extension()
