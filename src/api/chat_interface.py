@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime
 import sys
 
@@ -34,6 +34,7 @@ from src.rag.retriever import Retriever
 from src.data.load_company_data import load_test_company_data, format_company_data_for_pitch, load_company_data
 from src.utils.exporters import PitchExporter
 from src.utils.user_choices import UserChoiceManager
+from src.utils.pitch_question_analyzer import PitchQuestionAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +320,12 @@ def get_marketing_questionnaire():
     return MarketingAgent.MARKETING_QUESTIONNAIRE
 
 
+def get_policy_questionnaire():
+    """Get policy questionnaire questions."""
+    from src.agents.policy_agent import PolicyAgent
+    return PolicyAgent.POLICY_QUESTIONNAIRE
+
+
 def get_team_questionnaire():
     """Get team building questionnaire questions."""
     from src.agents.team_agent import TeamAgent
@@ -348,6 +355,67 @@ def should_show_question(question, answers):
             if answer != value:
                 return False
     return True
+
+
+def get_pitch_questions_for_company(company_data: Dict):
+    """Get intelligent pitch questions for company based on existing data."""
+    analyzer = PitchQuestionAnalyzer()
+    questions_to_ask, existing_data = analyzer.analyze_company_data(company_data)
+    return questions_to_ask, existing_data
+
+
+def generate_pitch_options(agent: PitchAgent, company_data: Dict, num_options: int = 3) -> List[Dict]:
+    """
+    Generate multiple pitch deck options with different angles/styles.
+    
+    Args:
+        agent: PitchAgent instance
+        company_data: Company data dictionary
+        num_options: Number of pitch options to generate (default: 3)
+        
+    Returns:
+        List of pitch options (each with slides, title, description)
+    """
+    options = []
+    
+    # Different pitch angles/styles
+    pitch_angles = [
+        {"style": "problem_solution", "focus": "Emphasize problem pain and solution fit", "tone": "urgent"},
+        {"style": "market_opportunity", "focus": "Highlight market size and growth potential", "tone": "ambitious"},
+        {"style": "traction_focused", "focus": "Showcase existing traction and validation", "tone": "confident"}
+    ]
+    
+    # Limit to requested number
+    pitch_angles = pitch_angles[:num_options]
+    
+    for i, angle in enumerate(pitch_angles, 1):
+        # Modify company_data to include pitch angle guidance
+        enhanced_data = {
+            **company_data,
+            "pitch_angle": angle["style"],
+            "pitch_focus": angle["focus"],
+            "pitch_tone": angle["tone"],
+            "pitch_option_number": i
+        }
+        
+        # Generate slides with this angle
+        try:
+            slides_data = agent.generate_slides(enhanced_data, gamma_only=True)  # Don't generate PPT yet
+            
+            option = {
+                "option_number": i,
+                "title": f"Option {i}: {angle['focus']}",
+                "description": f"{angle['tone'].title()} tone - {angle['focus']}",
+                "style": angle["style"],
+                "slides_data": slides_data,
+                "slides_count": slides_data.get("total_slides", 0)
+            }
+            options.append(option)
+        except Exception as e:
+            logger.error(f"Error generating pitch option {i}: {e}")
+            # Continue with other options
+    
+    return options
 
 
 def show_choice_selection(choice_manager: UserChoiceManager, agent_name: str, 
@@ -1297,7 +1365,36 @@ def main():
             
             st.markdown("---")
         
-        # Gamma and Canva removed - not working
+        # Display Gamma presentation if available
+        gamma_result = st.session_state.slides.get('gamma_presentation')
+        if gamma_result and (gamma_result.get('success') or gamma_result.get('presentation_url')):
+            st.markdown("---")
+            st.markdown("## 🎨 **Your Gamma.ai Presentation**")
+            gamma_url = (gamma_result.get('presentation_url') or 
+                       gamma_result.get('gammaUrl') or 
+                       gamma_result.get('url') or
+                       gamma_result.get('api_response', {}).get('gammaUrl'))
+            
+            if gamma_url:
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    st.markdown("### 🌐 **View Presentation**")
+                    st.markdown(f"[**🔗 Open in Gamma.ai →**]({gamma_url})")
+                    st.text_input("**Copy URL:**", value=gamma_url, key="gamma_view_slides", disabled=False)
+                with col_g2:
+                    st.markdown("### ✏️ **Edit Presentation**")
+                    edit_url = gamma_result.get('edit_url') or gamma_url
+                    st.markdown(f"[**✏️ Edit in Gamma.ai →**]({edit_url})")
+                    st.text_input("**Copy URL:**", value=edit_url, key="gamma_edit_slides", disabled=False)
+                
+                st.info("""
+                **📥 How to Download/Export from Gamma:**
+                1. Click the **"Open in Gamma.ai"** link above
+                2. In Gamma, click the **Share** button (top-right)
+                3. Select **Export** from the dropdown
+                4. Choose format: **PPTX**, **PDF**, or **PNG**
+                5. The file will download automatically
+                """)
         
         # Slide navigation
         col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 2, 1, 2])
@@ -1451,9 +1548,14 @@ def main():
             st.caption("💡 Tip: Click the code block above and copy to clipboard")
     
     # Show Gamma result persistently (above Quick Actions)
+    # Check both gamma_only_result AND slides data
+    gamma_result = None
     if st.session_state.get('gamma_only_result'):
         gamma_result = st.session_state.gamma_only_result
-        if gamma_result.get('success') or gamma_result.get('presentation_url'):
+    elif st.session_state.get('slides') and st.session_state.slides.get('gamma_presentation'):
+        gamma_result = st.session_state.slides.get('gamma_presentation')
+    
+    if gamma_result and (gamma_result.get('success') or gamma_result.get('presentation_url')):
             st.markdown("---")
             st.markdown("## 🎨 **Your Gamma.ai Presentation**")
             gamma_url = (gamma_result.get('presentation_url') or 
@@ -1616,69 +1718,43 @@ def main():
         st.session_state['enhance_with_ai'] = enhance_with_ai
         st.session_state['ai_provider'] = ai_provider
         
-        # 🆕 QUESTIONNAIRE FOR MISSING IMPORTANT DATA
-        if st.session_state.company_data:
-            missing_data = []
-            company_data = st.session_state.company_data
-            
-            # Check for critical missing data
-            if not company_data.get('company_name'):
-                missing_data.append(('company_name', 'Company Name', 'text'))
-            if not company_data.get('problem'):
-                missing_data.append(('problem', 'Problem Statement', 'textarea'))
-            if not company_data.get('solution'):
-                missing_data.append(('solution', 'Solution Description', 'textarea'))
-            if not company_data.get('target_market'):
-                missing_data.append(('target_market', 'Target Market', 'text'))
-            
-            # Check for important financial data if company is operating
-            company_stage = company_data.get('company_stage', '').lower()
-            if 'operating' in company_stage or 'established' in company_stage:
-                if not company_data.get('annual_revenue'):
-                    missing_data.append(('annual_revenue', 'Annual Revenue', 'text'))
-                if not company_data.get('customer_count'):
-                    missing_data.append(('customer_count', 'Number of Customers/Users', 'text'))
-                if not company_data.get('growth_rate'):
-                    missing_data.append(('growth_rate', 'Growth Rate', 'text'))
-            
-            # If missing critical data, show questionnaire
-            if missing_data:
-                st.warning("⚠️ **Missing Important Data** - Please fill these to create a better pitch deck:")
-                with st.expander("📝 Fill Missing Information", expanded=True):
-                    for field_id, field_label, field_type in missing_data:
-                        if field_type == 'textarea':
-                            value = st.text_area(
-                                f"**{field_label}**",
-                                value=company_data.get(field_id, ''),
-                                key=f"missing_{field_id}",
-                                help=f"This information is important for your pitch deck"
-                            )
-                        else:
-                            value = st.text_input(
-                                f"**{field_label}**",
-                                value=company_data.get(field_id, ''),
-                                key=f"missing_{field_id}",
-                                help=f"This information is important for your pitch deck"
-                            )
-                        if value:
-                            st.session_state.company_data[field_id] = value
-                    
-                    if st.button("✅ Save & Continue", key="save_missing_data"):
-                        st.success("✅ Data saved! You can now generate slides.")
-                        st.rerun()
+        # Intelligent Pitch Questionnaire Flow - handled below after patent questionnaire
         
         if st.button("🎯 Generate Slides"):
             if st.session_state.company_data:
-                # Set pending action to show choices
-                st.session_state.pending_action = {
-                    "agent_name": "pitch",
-                    "action": "generate_slides",
-                    "action_type": "generate_slides"
-                }
-                st.session_state.pending_action_data = {
-                    "enhance_with_ai": enhance_with_ai,
-                    "ai_provider": ai_provider
-                }
+                # Check if intelligent questions need to be asked first
+                questions_to_ask, existing_data = get_pitch_questions_for_company(st.session_state.company_data)
+                
+                if questions_to_ask:
+                    # Initialize pitch questionnaire if not exists
+                    if "pitch_questionnaire_active" not in st.session_state:
+                        st.session_state.pitch_questionnaire_active = False
+                    if "pitch_answers" not in st.session_state:
+                        st.session_state.pitch_answers = {}
+                    if "pitch_question_index" not in st.session_state:
+                        st.session_state.pitch_question_index = 0
+                    if "pitch_existing_data" not in st.session_state:
+                        st.session_state.pitch_existing_data = {}
+                    
+                    # Activate questionnaire
+                    st.session_state.pitch_questionnaire_active = True
+                    st.session_state.pitch_question_index = 0
+                    st.session_state.pitch_answers = {}
+                    st.session_state.pitch_existing_data = existing_data
+                    st.session_state.pitch_questions_to_ask = questions_to_ask
+                    st.info("💡 **Let's build your perfect pitch together!** I'll ask some targeted questions to understand your startup better.")
+                else:
+                    # All data exists, proceed directly to generation
+                    st.session_state.pending_action = {
+                        "agent_name": "pitch",
+                        "action": "generate_slides",
+                        "action_type": "generate_slides",
+                        "skip_questionnaire": True  # Flag to skip questionnaire
+                    }
+                    st.session_state.pending_action_data = {
+                        "enhance_with_ai": enhance_with_ai,
+                        "ai_provider": ai_provider
+                    }
                 st.rerun()
             else:
                 st.warning("Please enter company details first!")
@@ -1954,6 +2030,659 @@ def main():
             st.session_state.patent_answers = {}
             st.rerun()
     
+    # Marketing Questionnaire Flow
+    if "marketing_questionnaire_active" not in st.session_state:
+        st.session_state.marketing_questionnaire_active = False
+    if "marketing_answers" not in st.session_state:
+        st.session_state.marketing_answers = {}
+    if "marketing_question_index" not in st.session_state:
+        st.session_state.marketing_question_index = 0
+    
+    if st.session_state.marketing_questionnaire_active:
+        st.markdown("---")
+        st.subheader("📱 Marketing Content Questionnaire")
+        
+        questionnaire = get_marketing_questionnaire()
+        
+        # Filter questions based on dependencies
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.marketing_answers)]
+        
+        if st.session_state.marketing_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.marketing_question_index]
+            
+            st.progress((st.session_state.marketing_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.marketing_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"marketing_q_{current_question['id']}"
+            answer = None
+            
+            # Render input based on type
+            if current_question['type'] == 'textarea':
+                answer = st.text_area(
+                    "Your answer:",
+                    value=st.session_state.marketing_answers.get(current_question['id'], ''),
+                    height=150,
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'text':
+                answer = st.text_input(
+                    "Your answer:",
+                    value=st.session_state.marketing_answers.get(current_question['id'], ''),
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.marketing_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                
+                answer = st.selectbox(
+                    "Select an option:",
+                    options=current_question['options'],
+                    index=default_index,
+                    key=answer_key
+                )
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect(
+                    "Select all that apply:",
+                    options=current_question['options'],
+                    default=st.session_state.marketing_answers.get(current_question['id'], []),
+                    key=answer_key
+                )
+            
+            # Store answer
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.marketing_answers[current_question['id']] = answer
+                else:
+                    st.session_state.marketing_answers[current_question['id']] = answer
+            
+            # Navigation buttons
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.marketing_question_index == 0, key=f"marketing_prev_{answer_key}"):
+                    st.session_state.marketing_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"marketing_next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.marketing_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"marketing_cancel_{answer_key}"):
+                    st.session_state.marketing_questionnaire_active = False
+                    st.session_state.marketing_answers = {}
+                    st.session_state.marketing_question_index = 0
+                    st.rerun()
+        
+        else:
+            # All questions answered - generate marketing content
+            st.success("✅ All questions answered!")
+            
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.marketing_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.marketing_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_generate, col_restart = st.columns([3, 1])
+            
+            with col_generate:
+                if st.button("📱 Generate Marketing Content", type="primary"):
+                    marketing_agent, marketing_error = load_marketing_agent()
+                    if marketing_error:
+                        st.error(f"Error: {marketing_error}")
+                    else:
+                        with st.spinner("Generating marketing content..."):
+                            # Prepare context from answers
+                            marketing_context = st.session_state.marketing_answers.copy()
+                            # Merge with company data if available
+                            if st.session_state.company_data:
+                                marketing_context.update(st.session_state.company_data)
+                            
+                            # Determine content type and generate
+                            platform = marketing_context.get('platform', [])
+                            if isinstance(platform, list):
+                                platform = platform[0] if platform else 'Both'
+                            
+                            if 'Instagram' in platform or platform == 'Both':
+                                response = marketing_agent.generate_instagram_content(marketing_context)
+                            elif 'LinkedIn' in platform:
+                                response = marketing_agent.generate_linkedin_content(marketing_context)
+                            else:
+                                response = marketing_agent.suggest_marketing_strategies(marketing_context)
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response['response'],
+                                "sources": response.get('sources', []),
+                                "image_generated": response.get('image_generated', False),
+                                "image_path": response.get('image_path'),
+                                "image_url": response.get('image_url')
+                            })
+                            
+                            # Reset questionnaire
+                            st.session_state.marketing_questionnaire_active = False
+                            st.session_state.marketing_answers = {}
+                            st.session_state.marketing_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.marketing_questionnaire_active = False
+                    st.session_state.marketing_answers = {}
+                    st.session_state.marketing_question_index = 0
+                    st.rerun()
+    
+    # Policy Questionnaire Flow
+    if "policy_questionnaire_active" not in st.session_state:
+        st.session_state.policy_questionnaire_active = False
+    if "policy_answers" not in st.session_state:
+        st.session_state.policy_answers = {}
+    if "policy_question_index" not in st.session_state:
+        st.session_state.policy_question_index = 0
+    
+    if st.session_state.policy_questionnaire_active:
+        st.markdown("---")
+        st.subheader("📋 Policy & Compliance Questionnaire")
+        
+        questionnaire = get_policy_questionnaire()
+        
+        # Filter questions based on dependencies
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.policy_answers)]
+        
+        if st.session_state.policy_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.policy_question_index]
+            
+            st.progress((st.session_state.policy_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.policy_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"policy_q_{current_question['id']}"
+            answer = None
+            
+            # Render input based on type
+            if current_question['type'] == 'textarea':
+                answer = st.text_area(
+                    "Your answer:",
+                    value=st.session_state.policy_answers.get(current_question['id'], ''),
+                    height=150,
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'text':
+                answer = st.text_input(
+                    "Your answer:",
+                    value=st.session_state.policy_answers.get(current_question['id'], ''),
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.policy_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                
+                answer = st.selectbox(
+                    "Select an option:",
+                    options=current_question['options'],
+                    index=default_index,
+                    key=answer_key
+                )
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect(
+                    "Select all that apply:",
+                    options=current_question['options'],
+                    default=st.session_state.policy_answers.get(current_question['id'], []),
+                    key=answer_key
+                )
+            
+            # Store answer
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.policy_answers[current_question['id']] = answer
+                else:
+                    st.session_state.policy_answers[current_question['id']] = answer
+            
+            # Navigation buttons
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.policy_question_index == 0, key=f"policy_prev_{answer_key}"):
+                    st.session_state.policy_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"policy_next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.policy_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"policy_cancel_{answer_key}"):
+                    st.session_state.policy_questionnaire_active = False
+                    st.session_state.policy_answers = {}
+                    st.session_state.policy_question_index = 0
+                    st.rerun()
+        
+        else:
+            # All questions answered - generate policies
+            st.success("✅ All questions answered!")
+            
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.policy_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.policy_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_generate, col_restart = st.columns([3, 1])
+            
+            with col_generate:
+                if st.button("📋 Generate Policies", type="primary"):
+                    policy_agent, policy_error = load_policy_agent()
+                    if policy_error:
+                        st.error(f"Error: {policy_error}")
+                    else:
+                        with st.spinner("Generating policies..."):
+                            # Prepare context from answers
+                            policy_context = st.session_state.policy_answers.copy()
+                            # Merge with company data if available
+                            if st.session_state.company_data:
+                                policy_context.update(st.session_state.company_data)
+                            
+                            # Determine which policies to generate
+                            policy_priority = policy_context.get('policy_priority', [])
+                            if isinstance(policy_priority, str):
+                                policy_priority = [policy_priority]
+                            
+                            # Generate requested policies
+                            responses = []
+                            if 'Privacy Policy' in policy_priority:
+                                response = policy_agent.generate_privacy_policy(policy_context)
+                                responses.append(("Privacy Policy", response))
+                            if 'Terms of Service' in policy_priority:
+                                response = policy_agent.generate_terms_of_service(policy_context)
+                                responses.append(("Terms of Service", response))
+                            if not responses:
+                                # Default to privacy policy
+                                response = policy_agent.generate_privacy_policy(policy_context)
+                                responses.append(("Privacy Policy", response))
+                            
+                            # Combine responses
+                            combined_response = "# 📋 Generated Policies\n\n"
+                            all_sources = []
+                            for policy_name, resp in responses:
+                                combined_response += f"## {policy_name}\n\n{resp['response']}\n\n---\n\n"
+                                all_sources.extend(resp.get('sources', []))
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": combined_response,
+                                "sources": all_sources
+                            })
+                            
+                            # Reset questionnaire
+                            st.session_state.policy_questionnaire_active = False
+                            st.session_state.policy_answers = {}
+                            st.session_state.policy_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.policy_questionnaire_active = False
+                    st.session_state.policy_answers = {}
+                    st.session_state.policy_question_index = 0
+                    st.rerun()
+    
+    # Competitive Analysis Questionnaire Flow
+    if "competitive_questionnaire_active" not in st.session_state:
+        st.session_state.competitive_questionnaire_active = False
+    if "competitive_answers" not in st.session_state:
+        st.session_state.competitive_answers = {}
+    if "competitive_question_index" not in st.session_state:
+        st.session_state.competitive_question_index = 0
+    
+    if st.session_state.competitive_questionnaire_active:
+        st.markdown("---")
+        st.subheader("🔍 Competitive Analysis Questionnaire")
+        
+        from src.agents.competitive_agent import CompetitiveAgent
+        questionnaire = CompetitiveAgent.COMPETITIVE_QUESTIONNAIRE
+        
+        # Filter questions based on dependencies
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.competitive_answers)]
+        
+        if st.session_state.competitive_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.competitive_question_index]
+            
+            st.progress((st.session_state.competitive_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.competitive_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"competitive_q_{current_question['id']}"
+            answer = None
+            
+            # Render input based on type
+            if current_question['type'] == 'textarea':
+                answer = st.text_area(
+                    "Your answer:",
+                    value=st.session_state.competitive_answers.get(current_question['id'], ''),
+                    height=150,
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'text':
+                answer = st.text_input(
+                    "Your answer:",
+                    value=st.session_state.competitive_answers.get(current_question['id'], ''),
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.competitive_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                
+                answer = st.selectbox(
+                    "Select an option:",
+                    options=current_question['options'],
+                    index=default_index,
+                    key=answer_key
+                )
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect(
+                    "Select all that apply:",
+                    options=current_question['options'],
+                    default=st.session_state.competitive_answers.get(current_question['id'], []),
+                    key=answer_key
+                )
+            
+            # Store answer
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.competitive_answers[current_question['id']] = answer
+                else:
+                    st.session_state.competitive_answers[current_question['id']] = answer
+            
+            # Navigation buttons
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.competitive_question_index == 0, key=f"competitive_prev_{answer_key}"):
+                    st.session_state.competitive_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"competitive_next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.competitive_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"competitive_cancel_{answer_key}"):
+                    st.session_state.competitive_questionnaire_active = False
+                    st.session_state.competitive_answers = {}
+                    st.session_state.competitive_question_index = 0
+                    st.rerun()
+        
+        else:
+            # All questions answered - generate competitive analysis
+            st.success("✅ All questions answered!")
+            
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.competitive_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.competitive_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_analyze, col_restart = st.columns([3, 1])
+            
+            with col_analyze:
+                if st.button("🔍 Analyze Competitors", type="primary"):
+                    competitive_agent, competitive_error = load_competitive_agent()
+                    if competitive_error:
+                        st.error(f"Error: {competitive_error}")
+                    else:
+                        with st.spinner("Analyzing competitors and generating comprehensive competitive analysis..."):
+                            # Prepare context from answers
+                            competitive_context = st.session_state.competitive_answers.copy()
+                            # Merge with company data if available
+                            if st.session_state.company_data:
+                                competitive_context.update(st.session_state.company_data)
+                            
+                            # Perform competitive analysis with correct method signature
+                            response = competitive_agent.analyze_competitors(
+                                company_details=competitive_context,
+                                competitors=None
+                            )
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response['response'],
+                                "sources": response.get('sources', [])
+                            })
+                            
+                            # Reset questionnaire
+                            st.session_state.competitive_questionnaire_active = False
+                            st.session_state.competitive_answers = {}
+                            st.session_state.competitive_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.competitive_questionnaire_active = False
+                    st.session_state.competitive_answers = {}
+                    st.session_state.competitive_question_index = 0
+                    st.rerun()
+    
+    # Team & Hiring Questionnaire Flow
+    if "team_questionnaire_active" not in st.session_state:
+        st.session_state.team_questionnaire_active = False
+    if "team_answers" not in st.session_state:
+        st.session_state.team_answers = {}
+    if "team_question_index" not in st.session_state:
+        st.session_state.team_question_index = 0
+    
+    if st.session_state.team_questionnaire_active:
+        st.markdown("---")
+        st.subheader("👥 Team & Hiring Questionnaire")
+        
+        questionnaire = get_team_questionnaire()
+        
+        # Filter questions based on dependencies
+        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.team_answers)]
+        
+        if st.session_state.team_question_index < len(visible_questions):
+            current_question = visible_questions[st.session_state.team_question_index]
+            
+            st.progress((st.session_state.team_question_index + 1) / len(visible_questions))
+            st.caption(f"Question {st.session_state.team_question_index + 1} of {len(visible_questions)}")
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"team_q_{current_question['id']}"
+            answer = None
+            
+            # Render input based on type
+            if current_question['type'] == 'textarea':
+                answer = st.text_area(
+                    "Your answer:",
+                    value=st.session_state.team_answers.get(current_question['id'], ''),
+                    height=150,
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'text':
+                answer = st.text_input(
+                    "Your answer:",
+                    value=st.session_state.team_answers.get(current_question['id'], ''),
+                    key=answer_key,
+                    placeholder=current_question.get('placeholder', '')
+                )
+            elif current_question['type'] == 'select':
+                current_value = st.session_state.team_answers.get(current_question['id'])
+                default_index = 0
+                if current_value and current_value in current_question['options']:
+                    default_index = current_question['options'].index(current_value)
+                
+                answer = st.selectbox(
+                    "Select an option:",
+                    options=current_question['options'],
+                    index=default_index,
+                    key=answer_key
+                )
+            elif current_question['type'] == 'multiselect':
+                answer = st.multiselect(
+                    "Select all that apply:",
+                    options=current_question['options'],
+                    default=st.session_state.team_answers.get(current_question['id'], []),
+                    key=answer_key
+                )
+            
+            # Store answer
+            if answer:
+                if current_question['type'] == 'multiselect':
+                    st.session_state.team_answers[current_question['id']] = answer
+                else:
+                    st.session_state.team_answers[current_question['id']] = answer
+            
+            # Navigation buttons
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.team_question_index == 0, key=f"team_prev_{answer_key}"):
+                    st.session_state.team_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = False
+                if current_question.get('required'):
+                    if current_question['type'] == 'multiselect':
+                        is_disabled = not answer or len(answer) == 0
+                    else:
+                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"team_next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please answer this question to continue.")
+                    else:
+                        st.session_state.team_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"team_cancel_{answer_key}"):
+                    st.session_state.team_questionnaire_active = False
+                    st.session_state.team_answers = {}
+                    st.session_state.team_question_index = 0
+                    st.rerun()
+        
+        else:
+            # All questions answered - generate team analysis/job descriptions
+            st.success("✅ All questions answered!")
+            
+            st.subheader("📋 Your Answers Summary")
+            for q in visible_questions:
+                if q['id'] in st.session_state.team_answers:
+                    st.markdown(f"**{q['question']}**")
+                    answer = st.session_state.team_answers[q['id']]
+                    if isinstance(answer, list):
+                        st.markdown(f"  → {', '.join(answer)}")
+                    else:
+                        st.markdown(f"  → {answer}")
+                    st.markdown("---")
+            
+            col_analyze, col_restart = st.columns([3, 1])
+            
+            with col_analyze:
+                if st.button("👥 Analyze Team Needs", type="primary"):
+                    team_agent, team_error = load_team_agent()
+                    if team_error:
+                        st.error(f"Error: {team_error}")
+                    else:
+                        with st.spinner("Analyzing team needs and generating recommendations..."):
+                            # Prepare context from answers
+                            team_context = st.session_state.team_answers.copy()
+                            # Merge with company data if available
+                            if st.session_state.company_data:
+                                team_context.update(st.session_state.company_data)
+                            
+                            # Perform team analysis
+                            response = team_agent.analyze_team_needs(
+                                company_context=team_context,
+                                team_context=team_context
+                            )
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response['response'],
+                                "sources": response.get('sources', [])
+                            })
+                            
+                            # Reset questionnaire
+                            st.session_state.team_questionnaire_active = False
+                            st.session_state.team_answers = {}
+                            st.session_state.team_question_index = 0
+                            st.rerun()
+            
+            with col_restart:
+                if st.button("🔄 Restart"):
+                    st.session_state.team_questionnaire_active = False
+                    st.session_state.team_answers = {}
+                    st.session_state.team_question_index = 0
+                    st.rerun()
+    
     # Patent Questionnaire Flow
     if "patent_questionnaire_active" not in st.session_state:
         st.session_state.patent_questionnaire_active = False
@@ -2177,6 +2906,272 @@ def main():
                     st.session_state.patent_answers = {}
                     st.session_state.patent_question_index = 0
                     st.rerun()
+    
+    # Intelligent Pitch Questionnaire Flow
+    if "pitch_questionnaire_active" not in st.session_state:
+        st.session_state.pitch_questionnaire_active = False
+    if "pitch_answers" not in st.session_state:
+        st.session_state.pitch_answers = {}
+    if "pitch_question_index" not in st.session_state:
+        st.session_state.pitch_question_index = 0
+    if "pitch_existing_data" not in st.session_state:
+        st.session_state.pitch_existing_data = {}
+    
+    if st.session_state.pitch_questionnaire_active:
+        st.markdown("---")
+        st.subheader("🚀 Intelligent Pitch Builder - Let's Build Your Perfect Pitch!")
+        
+        # Show existing data summary if available
+        if st.session_state.pitch_existing_data:
+            with st.expander("✅ Information I Already Understand", expanded=False):
+                st.info("Great! I already have some information about your startup. Let me ask targeted questions to fill in the gaps.")
+                for q_id, data in list(st.session_state.pitch_existing_data.items())[:5]:  # Show first 5
+                    st.markdown(f"**{data.get('question', '')}**")
+                    value = data.get('value', '')
+                    if isinstance(value, str) and len(value) > 100:
+                        value = value[:100] + "..."
+                    st.caption(f"✓ {value}")
+        
+        questions_to_ask = st.session_state.get("pitch_questions_to_ask", [])
+        
+        if st.session_state.pitch_question_index < len(questions_to_ask):
+            current_question = questions_to_ask[st.session_state.pitch_question_index]
+            analyzer = PitchQuestionAnalyzer()
+            
+            st.progress((st.session_state.pitch_question_index + 1) / len(questions_to_ask))
+            st.caption(f"Question {st.session_state.pitch_question_index + 1} of {len(questions_to_ask)}")
+            
+            # Show contextual message
+            contextual_msg = analyzer.get_contextual_message(current_question, st.session_state.pitch_existing_data)
+            st.info(contextual_msg)
+            
+            st.markdown(f"### {current_question['question']}")
+            
+            answer_key = f"pitch_q_{current_question['id']}"
+            answer = None
+            
+            # All pitch questions are textarea for detailed answers
+            answer = st.text_area(
+                "Your answer:",
+                value=st.session_state.pitch_answers.get(current_question['id'], ''),
+                height=150,
+                key=answer_key,
+                placeholder=f"Provide a detailed answer to help build your pitch..."
+            )
+            
+            # Store answer
+            if answer:
+                st.session_state.pitch_answers[current_question['id']] = answer
+            
+            # Navigation buttons
+            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
+            
+            with col_prev:
+                if st.button("◀ Previous", disabled=st.session_state.pitch_question_index == 0, key=f"pitch_prev_{answer_key}"):
+                    st.session_state.pitch_question_index -= 1
+                    st.rerun()
+            
+            with col_next:
+                is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
+                
+                if st.button("Next ▶", disabled=is_disabled, key=f"pitch_next_{answer_key}"):
+                    if is_disabled:
+                        st.warning("Please provide an answer to continue.")
+                    else:
+                        st.session_state.pitch_question_index += 1
+                        st.rerun()
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"pitch_cancel_{answer_key}"):
+                    st.session_state.pitch_questionnaire_active = False
+                    st.session_state.pitch_answers = {}
+                    st.session_state.pitch_question_index = 0
+                    st.session_state.pitch_existing_data = {}
+                    st.rerun()
+        
+        else:
+            # All questions answered - merge answers and generate pitch options
+            st.success("✅ All questions answered! Now let's create your pitch options.")
+            
+            # Merge answers with company data
+            analyzer = PitchQuestionAnalyzer()
+            merged_company_data = analyzer.merge_answers_with_company_data(
+                st.session_state.company_data,
+                st.session_state.pitch_answers
+            )
+            st.session_state.company_data = merged_company_data
+            
+            # Generate 2-3 pitch options
+            st.subheader("🎯 Generating Pitch Options...")
+            with st.spinner("Creating 3 different pitch deck options with different angles..."):
+                try:
+                    pitch_options = generate_pitch_options(agent, merged_company_data, num_options=3)
+                    
+                    if pitch_options:
+                        st.session_state.pitch_options = pitch_options
+                        st.session_state.pitch_questionnaire_active = False  # Close questionnaire
+                        st.session_state.pitch_options_ready = True  # Show options selection
+                        st.rerun()
+                    else:
+                        st.error("Failed to generate pitch options. Please try again.")
+                except Exception as e:
+                    st.error(f"Error generating pitch options: {e}")
+                    logger.error(f"Error in pitch options generation: {e}", exc_info=True)
+    
+    # Pitch Options Selection and Refinement Flow
+    if st.session_state.get("pitch_options_ready") and st.session_state.get("pitch_options"):
+        st.markdown("---")
+        st.subheader("🎯 Choose Your Pitch Style")
+        st.info("I've created 3 different pitch deck options. Review and select the one that best fits your needs, then we'll refine it together!")
+        
+        pitch_options = st.session_state.pitch_options
+        selected_option_index = st.session_state.get("selected_pitch_option_index", None)
+        
+        # Display options in columns
+        cols = st.columns(len(pitch_options))
+        
+        for idx, option in enumerate(pitch_options):
+            with cols[idx]:
+                is_selected = selected_option_index == idx
+                st.markdown(f"### {option['title']}")
+                st.caption(option['description'])
+                st.info(f"📊 {option['slides_count']} slides")
+                
+                # Show preview of first slide
+                if option.get('slides_data', {}).get('slides'):
+                    first_slide = option['slides_data']['slides'][0]
+                    with st.expander("Preview First Slide", expanded=False):
+                        st.markdown(f"**{first_slide.get('title', '')}**")
+                        st.caption(first_slide.get('content', '')[:200] + "...")
+                
+                if st.button(f"Select Option {idx + 1}", key=f"select_option_{idx}", 
+                           type="primary" if is_selected else "secondary"):
+                    st.session_state.selected_pitch_option_index = idx
+                    st.session_state.selected_pitch_option = option
+                    st.rerun()
+        
+        # If option selected, show refinement step
+        if selected_option_index is not None:
+            st.markdown("---")
+            st.subheader("✨ Refine Your Selected Pitch")
+            selected_option = st.session_state.selected_pitch_option
+            
+            st.success(f"✅ You selected: **{selected_option['title']}**")
+            st.info("💡 Would you like to make any changes to this pitch? Tell me what you'd like to adjust, and I'll update it.")
+            
+            refinement_request = st.text_area(
+                "What would you like to change? (e.g., 'Emphasize our traction more', 'Add more details about the market opportunity', 'Make the problem statement more urgent')",
+                height=100,
+                key="pitch_refinement_request",
+                placeholder="Describe the changes you'd like..."
+            )
+            
+            col_refine, col_finalize = st.columns(2)
+            
+            with col_refine:
+                if st.button("🔧 Apply Refinements", disabled=not refinement_request or len(refinement_request.strip()) < 10):
+                    if refinement_request:
+                        with st.spinner("Applying your refinements..."):
+                            # Get selected slides
+                            selected_slides = selected_option['slides_data']['slides']
+                            
+                            # Use agent to refine based on request
+                            # This is a simplified version - you might want to create a refine_slides method
+                            try:
+                                # Merge refinement request into company data
+                                refined_company_data = {
+                                    **st.session_state.company_data,
+                                    "refinement_request": refinement_request,
+                                    "existing_slides": selected_slides,
+                                    "pitch_angle": selected_option['style']
+                                }
+                                
+                                # Generate refined slides
+                                refined_slides_data = agent.generate_slides(refined_company_data, gamma_only=True)
+                                
+                                # Update selected option
+                                st.session_state.selected_pitch_option['slides_data'] = refined_slides_data
+                                st.session_state.selected_pitch_option['slides_count'] = refined_slides_data.get('total_slides', 0)
+                                st.session_state.pitch_refinement_history = st.session_state.get('pitch_refinement_history', [])
+                                st.session_state.pitch_refinement_history.append(refinement_request)
+                                
+                                st.success("✅ Refinements applied! Review the updated pitch below.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error applying refinements: {e}")
+                                logger.error(f"Error refining pitch: {e}", exc_info=True)
+            
+            with col_finalize:
+                if st.button("✅ Finalize & Generate", type="primary"):
+                    # User is happy with the pitch, now generate final version with PPT and Gamma
+                    with st.spinner("Generating final pitch deck with PowerPoint and Gamma presentation..."):
+                        selected_slides = st.session_state.selected_pitch_option['slides_data']['slides']
+                        company_data_final = {
+                            **st.session_state.company_data,
+                            "enhance_with_ai": st.session_state.get('enhance_with_ai', True),
+                            "ai_provider": st.session_state.get('ai_provider', 'Auto'),
+                            "gamma_theme": st.session_state.get("gamma_theme", "startup-pitch"),
+                            "final_slides": selected_slides  # Use refined slides
+                        }
+                        
+                        # Generate final slides (with PPT and Gamma)
+                        try:
+                            # Create slides data structure
+                            final_slides_data = {
+                                "slides": selected_slides,
+                                "total_slides": len(selected_slides),
+                                "company_name": st.session_state.company_data.get('company_name', 'Unknown')
+                            }
+                            
+                            # Generate PowerPoint
+                            from src.utils.exporters import PitchExporter
+                            exporter = PitchExporter()
+                            enhance_with_ai = st.session_state.get('enhance_with_ai', True)
+                            ai_provider = st.session_state.get('ai_provider', 'Auto')
+                            
+                            pptx_path = exporter.export_to_powerpoint(
+                                final_slides_data["slides"],
+                                final_slides_data["company_name"],
+                                include_images=True,
+                                enhance_with_ai=enhance_with_ai,
+                                company_data=st.session_state.company_data,
+                                full_rewrite=True,
+                                ai_provider=ai_provider
+                            )
+                            
+                            if pptx_path:
+                                final_slides_data["pptx_path"] = pptx_path
+                            
+                            # Generate Gamma (use existing slides data)
+                            from src.utils.gamma_integration import GammaIntegration
+                            gamma = GammaIntegration()
+                            
+                            gamma_result = gamma.create_presentation(
+                                final_slides_data["slides"],
+                                final_slides_data["company_name"],
+                                theme_id=st.session_state.get("gamma_theme", "startup-pitch"),
+                                enhance_with_ai=enhance_with_ai
+                            )
+                            
+                            final_slides_data["gamma_presentation"] = gamma_result
+                            
+                            # Store final slides
+                            st.session_state.slides = final_slides_data
+                            st.session_state.current_slide = 0
+                            
+                            # Reset pitch questionnaire state
+                            st.session_state.pitch_questionnaire_active = False
+                            st.session_state.pitch_options_ready = False
+                            st.session_state.selected_pitch_option_index = None
+                            st.session_state.pitch_options = None
+                            st.session_state.selected_pitch_option = None
+                            
+                            st.success("🎉 **Pitch deck generated successfully!** Check the slides viewer and download options.")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Error generating final pitch: {e}")
+                            logger.error(f"Error in final pitch generation: {e}", exc_info=True)
     
     # Additional actions
     col5, col6 = st.columns(2)
