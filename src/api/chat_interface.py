@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional
+from datetime import datetime
 import sys
 
 # Fix tokenizers parallelism warning
@@ -32,6 +33,7 @@ from src.rag.vector_store import VectorStore
 from src.rag.retriever import Retriever
 from src.data.load_company_data import load_test_company_data, format_company_data_for_pitch, load_company_data
 from src.utils.exporters import PitchExporter
+from src.utils.user_choices import UserChoiceManager
 
 logger = logging.getLogger(__name__)
 
@@ -348,6 +350,99 @@ def should_show_question(question, answers):
     return True
 
 
+def show_choice_selection(choice_manager: UserChoiceManager, agent_name: str, 
+                          action: str, user_id: str, company_id: str) -> Optional[Dict]:
+    """
+    Show choice selection UI and return selected choice.
+    
+    Args:
+        choice_manager: UserChoiceManager instance
+        agent_name: Name of the agent
+        action: Action name
+        user_id: User identifier
+        company_id: Company identifier
+        
+    Returns:
+        Selected choice dictionary or None if not yet selected
+    """
+    choices = choice_manager.get_choices_for_action(agent_name, action)
+    
+    if len(choices) == 1:
+        # Only one choice, auto-select it
+        return choices[0]
+    
+    # Check if a choice was already selected in this session
+    choice_key_base = f"selected_choice_{agent_name}_{action}"
+    if choice_key_base in st.session_state:
+        return st.session_state[choice_key_base]
+    
+    # Show choice selection UI
+    st.markdown("### 🎯 Choose an Option")
+    st.info("Please select how you'd like to proceed:")
+    
+    # Display choices in columns
+    num_cols = min(len(choices), 3)
+    cols = st.columns(num_cols)
+    
+    for idx, choice in enumerate(choices):
+        with cols[idx % num_cols]:
+            with st.container():
+                st.markdown(f"#### {choice.get('icon', '📌')} {choice.get('label', 'Option')}")
+                st.caption(choice.get('description', ''))
+                
+                choice_key = f"choice_btn_{agent_name}_{action}_{choice['id']}"
+                if st.button(f"Select", key=choice_key, use_container_width=True):
+                    # Store selected choice in session state
+                    st.session_state[choice_key_base] = choice
+                    st.rerun()
+    
+    return None
+
+
+def execute_action_with_choice(choice_manager: UserChoiceManager, agent_name: str,
+                                action: str, choice: Dict, user_id: str, company_id: str,
+                                execute_func, *args, **kwargs):
+    """
+    Execute an action with the selected choice and save the choice.
+    
+    Args:
+        choice_manager: UserChoiceManager instance
+        agent_name: Name of the agent
+        action: Action name
+        choice: Selected choice dictionary
+        user_id: User identifier
+        company_id: Company identifier
+        execute_func: Function to execute the action
+        *args, **kwargs: Arguments to pass to execute_func
+        
+    Returns:
+        Result from execute_func
+    """
+    # Save the choice
+    choice_manager.save_choice(
+        user_id=user_id,
+        company_id=company_id,
+        agent_name=agent_name,
+        action=action,
+        choice_id=choice['id'],
+        choice_data=choice,
+        context={
+            "timestamp": datetime.now().isoformat(),
+            "action_args": str(args),
+            "action_kwargs": {k: str(v) for k, v in kwargs.items()}
+        }
+    )
+    
+    # Merge choice value into kwargs
+    if 'choice_value' not in kwargs:
+        kwargs['choice_value'] = choice.get('value', {})
+    else:
+        kwargs['choice_value'].update(choice.get('value', {}))
+    
+    # Execute the function
+    return execute_func(*args, **kwargs)
+
+
 def main():
     """Main chat interface."""
     st.title("🚀 TechScopeAI - Pitch Agent")
@@ -368,6 +463,16 @@ def main():
         st.session_state.elevator_pitch = None
     if 'use_supervisor' not in st.session_state:
         st.session_state.use_supervisor = True  # Enable supervisor by default
+    if 'pending_action' not in st.session_state:
+        st.session_state.pending_action = None  # Store pending action waiting for choice
+    if 'pending_action_data' not in st.session_state:
+        st.session_state.pending_action_data = None  # Store action context
+    if 'user_id' not in st.session_state:
+        import uuid
+        st.session_state.user_id = str(uuid.uuid4())  # Generate unique user ID for session
+    
+    # Initialize UserChoiceManager
+    choice_manager = UserChoiceManager()
     
     # Load agent
     agent, error = load_pitch_agent()
@@ -815,7 +920,31 @@ def main():
                                 st.error(f"Patent Agent Error: {patent_error}")
                                 response = {"response": f"Error: {patent_error}", "sources": []}
                             else:
-                                if "patentability" in prompt_lower or "assess" in prompt_lower:
+                                # HITL: Check if we need to trigger questionnaire for patent analysis
+                                # If user asks about patent but hasn't provided invention details, trigger questionnaire
+                                needs_questionnaire = (
+                                    ("patent" in prompt_lower or "invention" in prompt_lower or "patentability" in prompt_lower) and
+                                    not st.session_state.get("patent_answers") and
+                                    ("analyze" in prompt_lower or "help" in prompt_lower or "assess" in prompt_lower or "?" in prompt)
+                                )
+                                
+                                if needs_questionnaire:
+                                    # Trigger patent questionnaire automatically (HITL)
+                                    if "patent_questionnaire_active" not in st.session_state:
+                                        st.session_state.patent_questionnaire_active = False
+                                    if "patent_answers" not in st.session_state:
+                                        st.session_state.patent_answers = {}
+                                    if "patent_question_index" not in st.session_state:
+                                        st.session_state.patent_question_index = 0
+                                    
+                                    st.session_state.patent_questionnaire_active = True
+                                    st.session_state.patent_question_index = 0
+                                    st.session_state.patent_answers = {}
+                                    
+                                    # Show message explaining why questionnaire is needed
+                                    st.info("🔬 **I need more information to help you with patent analysis.** Please answer a few questions about your invention.")
+                                    st.rerun()
+                                elif "patentability" in prompt_lower or "assess" in prompt_lower:
                                     invention = prompt if not st.session_state.company_data else f"{st.session_state.company_data.get('solution', prompt)}"
                                     response = patent_agent.assess_patentability(invention, st.session_state.company_data)
                                 elif "prior art" in prompt_lower or "search" in prompt_lower:
@@ -1362,16 +1491,57 @@ def main():
     with col1:
         if st.button("📝 Generate Pitch"):
             if st.session_state.company_data:
+                # Set pending action to show choices
+                st.session_state.pending_action = {
+                    "agent_name": "pitch",
+                    "action": "generate_pitch",
+                    "action_type": "generate_pitch"
+                }
+                st.session_state.pending_action_data = {}
+                st.rerun()
+            else:
+                st.warning("Please enter company details first!")
+        
+        # Handle pending pitch generation with choice selection
+        if st.session_state.pending_action and st.session_state.pending_action.get("action_type") == "generate_pitch":
+            company_id = st.session_state.get("company_id", "default")
+            user_id = st.session_state.get("user_id", "anonymous")
+            
+            selected_choice = show_choice_selection(
+                choice_manager, 
+                "pitch", 
+                "generate_pitch",
+                user_id,
+                company_id
+            )
+            
+            if selected_choice:
+                # Execute action with choice
+                choice_value = selected_choice.get('value', {})
+                format_type = choice_value.get('format', 'text')
+                
                 with st.spinner("Generating pitch..."):
                     response = agent.generate_from_details(st.session_state.company_data)
+                    
+                    # Save choice
+                    choice_manager.save_choice(
+                        user_id=user_id,
+                        company_id=company_id,
+                        agent_name="pitch",
+                        action="generate_pitch",
+                        choice_id=selected_choice['id'],
+                        choice_data=selected_choice,
+                        context={"format_type": format_type}
+                    )
+                    
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": response['response'],
                         "sources": response.get('sources', [])
                     })
+                    st.session_state.pending_action = None
+                    st.session_state.pending_action_data = None
                     st.rerun()
-            else:
-                st.warning("Please enter company details first!")
     
     with col2:
         # Quick test button for Gamma/Canva
@@ -1499,282 +1669,179 @@ def main():
         
         if st.button("🎯 Generate Slides"):
             if st.session_state.company_data:
-                # Show info about AI provider
-                if enhance_with_ai:
-                    if ai_provider == "Gemini":
-                        st.info("🤖 Using **Gemini** for AI enhancement. If quota is exceeded, will automatically fallback to OpenAI.")
-                    elif ai_provider == "OpenAI":
-                        st.info("🤖 Using **ChatGPT (OpenAI)** for AI enhancement.")
-                    else:
-                        st.info("🤖 Using **Auto mode**: Will try Gemini first, then automatically fallback to OpenAI if needed.")
-                
-                with st.spinner("Generating slides and PowerPoint..."):
-                    # Include AI provider in company data
-                    company_data_with_themes = {
-                        **st.session_state.company_data,
-                        "enhance_with_ai": enhance_with_ai,  # Pass AI enhancement preference
-                        "ai_provider": ai_provider  # 🆕 Pass AI provider preference
-                    }
-                    slides_data = agent.generate_slides(company_data_with_themes)
-                    st.session_state.slides = slides_data
-                    st.session_state.current_slide = 0
-                    
-                    success_msg = f"✅ Generated {slides_data.get('total_slides', 0)} slides!"
-                    
-                    # Check what was generated
-                    if slides_data.get('pptx_path'):
-                        st.success(success_msg)
-                    
-                    # Show PowerPoint status and download
-                    if slides_data.get('pptx_path'):
-                        pptx_path = Path(slides_data['pptx_path'])
-                        if pptx_path.exists():
-                            st.markdown("---")
-                            st.success("📊 **PowerPoint Generated Successfully!**")
-                            with open(pptx_path, 'rb') as f:
-                                st.download_button(
-                                    "⬇️ Download PowerPoint Presentation",
-                                    f.read(),
-                                    file_name=pptx_path.name,
-                                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                    help="Download the complete PowerPoint with all slides",
-                                    use_container_width=True
-                                )
+                # Set pending action to show choices
+                st.session_state.pending_action = {
+                    "agent_name": "pitch",
+                    "action": "generate_slides",
+                    "action_type": "generate_slides"
+                }
+                st.session_state.pending_action_data = {
+                    "enhance_with_ai": enhance_with_ai,
+                    "ai_provider": ai_provider
+                }
+                st.rerun()
+            else:
+                st.warning("Please enter company details first!")
         
-        # Separate Gamma button
-        if st.button("🚀 Generate Slides Using Gamma", help="Generate slides and create Gamma.ai presentation with PPT download"):
-            if st.session_state.company_data:
-                # Show info about AI provider
-                if enhance_with_ai:
-                    if ai_provider == "Gemini":
-                        st.info("🤖 Using **Gemini** for AI enhancement. If quota is exceeded, will automatically fallback to OpenAI.")
-                    elif ai_provider == "OpenAI":
-                        st.info("🤖 Using **ChatGPT (OpenAI)** for AI enhancement.")
-                    else:
-                        st.info("🤖 Using **Auto mode**: Will try Gemini first, then automatically fallback to OpenAI if needed.")
+        # Handle pending action with choice selection
+        if st.session_state.pending_action:
+            pending = st.session_state.pending_action
+            if pending.get("action_type") == "generate_slides":
+                company_id = st.session_state.get("company_id", "default")
+                user_id = st.session_state.get("user_id", "anonymous")
+                preferred_choice = pending.get("preferred_choice")
                 
-                # Print to console immediately
-                print(f"\n{'='*80}")
-                print("🚀 GAMMA BUTTON CLICKED - Starting Gamma-only generation")
-                print(f"{'='*80}\n")
+                # If there's a preferred choice (e.g., from Gamma button), auto-select it
+                if preferred_choice:
+                    choices = choice_manager.get_choices_for_action("pitch", "generate_slides")
+                    selected_choice = next((c for c in choices if c['id'] == preferred_choice), None)
+                    if selected_choice:
+                        # Auto-execute with preferred choice
+                        choice_value = selected_choice.get('value', {})
+                        gamma_mode = choice_value.get('gamma', False)
+                        
+                        # Show info about AI provider
+                        if st.session_state.pending_action_data.get('enhance_with_ai'):
+                            ai_prov = st.session_state.pending_action_data.get('ai_provider', 'Auto')
+                            if ai_prov == "Gemini":
+                                st.info("🤖 Using **Gemini** for AI enhancement. If quota is exceeded, will automatically fallback to OpenAI.")
+                            elif ai_prov == "OpenAI":
+                                st.info("🤖 Using **ChatGPT (OpenAI)** for AI enhancement.")
+                            else:
+                                st.info("🤖 Using **Auto mode**: Will try Gemini first, then automatically fallback to OpenAI if needed.")
+                        
+                        with st.spinner("Generating slides..."):
+                            # Include AI provider in company data
+                            company_data_with_themes = {
+                                **st.session_state.company_data,
+                                "enhance_with_ai": st.session_state.pending_action_data.get('enhance_with_ai', True),
+                                "ai_provider": st.session_state.pending_action_data.get('ai_provider', 'Auto'),
+                                "gamma_theme": st.session_state.get("gamma_theme", "startup-pitch")
+                            }
+                            
+                            # Execute with choice
+                            if gamma_mode:
+                                slides_data = agent.generate_slides(company_data_with_themes, gamma_only=True)
+                            else:
+                                slides_data = agent.generate_slides(company_data_with_themes)
+                            
+                            # Save choice
+                            choice_manager.save_choice(
+                                user_id=user_id,
+                                company_id=company_id,
+                                agent_name="pitch",
+                                action="generate_slides",
+                                choice_id=selected_choice['id'],
+                                choice_data=selected_choice,
+                                context={"gamma_mode": gamma_mode, "preferred": True}
+                            )
+                            
+                            st.session_state.slides = slides_data
+                            st.session_state.current_slide = 0
+                            st.session_state.pending_action = None
+                            st.session_state.pending_action_data = None
+                            st.rerun()
+                        return
                 
-                with st.spinner("🚀 Generating slides and creating Gamma.ai presentation (Gamma-only mode)..."):
-                    # Include AI provider in company data
-                    company_data_with_themes = {
-                        **st.session_state.company_data,
-                        "enhance_with_ai": enhance_with_ai,
-                        "ai_provider": ai_provider,
-                        "gamma_theme": st.session_state.get("gamma_theme", "startup-pitch")
-                    }
+                # Show choice selection UI
+                selected_choice = show_choice_selection(
+                    choice_manager, 
+                    "pitch", 
+                    "generate_slides",
+                    user_id,
+                    company_id
+                )
+                
+                if selected_choice:
+                    # Clear the stored choice after using it
+                    choice_key_base = f"selected_choice_pitch_generate_slides"
+                    if choice_key_base in st.session_state:
+                        del st.session_state[choice_key_base]
+                    # Execute action with choice
+                    choice_value = selected_choice.get('value', {})
+                    gamma_mode = choice_value.get('gamma', False)
                     
-                    print(f"📋 Company data prepared: {company_data_with_themes.get('company_name', 'Unknown')}")
-                    print(f"🔧 Calling generate_slides with gamma_only=True")
-                    
-                    # Generate slides with gamma_only=True to skip PowerPoint generation
-                    slides_data = agent.generate_slides(company_data_with_themes, gamma_only=True)
-                    
-                    print(f"✅ generate_slides returned. Keys: {list(slides_data.keys())}")
-                    print(f"📊 pptx_path in result: {slides_data.get('pptx_path', 'NOT SET')}")
-                    print(f"🎨 gamma_presentation in result: {'YES' if 'gamma_presentation' in slides_data else 'NO'}")
-                    print(f"⏭️ pptx_skipped flag: {slides_data.get('pptx_skipped', 'NOT SET')}")
-                    
-                    # Check Gamma presentation status
-                    if 'gamma_presentation' in slides_data:
-                        gamma_result = slides_data['gamma_presentation']
-                        print(f"\n{'='*80}")
-                        print(f"🎨 GAMMA PRESENTATION RESULT:")
-                        print(f"   Success: {gamma_result.get('success', 'NOT SET')}")
-                        if gamma_result.get('success'):
-                            print(f"   ✅ Presentation URL: {gamma_result.get('presentation_url', 'NOT SET')}")
-                            print(f"   ✅ Edit URL: {gamma_result.get('edit_url', 'NOT SET')}")
-                            print(f"   ✅ Generation ID: {gamma_result.get('generation_id', 'NOT SET')}")
+                    # Show info about AI provider
+                    if st.session_state.pending_action_data.get('enhance_with_ai'):
+                        ai_prov = st.session_state.pending_action_data.get('ai_provider', 'Auto')
+                        if ai_prov == "Gemini":
+                            st.info("🤖 Using **Gemini** for AI enhancement. If quota is exceeded, will automatically fallback to OpenAI.")
+                        elif ai_prov == "OpenAI":
+                            st.info("🤖 Using **ChatGPT (OpenAI)** for AI enhancement.")
                         else:
-                            print(f"   ❌ Error: {gamma_result.get('error', 'NOT SET')}")
-                            print(f"   ❌ Message: {gamma_result.get('message', 'NOT SET')}")
-                            if gamma_result.get('generation_id'):
-                                print(f"   ⚠️ Generation ID: {gamma_result.get('generation_id')} (may still be processing)")
-                        print(f"{'='*80}\n")
+                            st.info("🤖 Using **Auto mode**: Will try Gemini first, then automatically fallback to OpenAI if needed.")
                     
-                    # Ensure pptx_skipped flag is set
-                    if slides_data.get('pptx_skipped') is None:
-                        slides_data['pptx_skipped'] = True
-                        print(f"✅ Set pptx_skipped=True explicitly")
-                    
-                    st.session_state.slides = slides_data
-                    st.session_state.current_slide = 0
-                    
-                    print(f"🔍 Session state slides keys: {list(st.session_state.slides.keys())}")
-                    print(f"🔍 Session state pptx_skipped: {st.session_state.slides.get('pptx_skipped', 'NOT SET')}")
-                    
-                    success_msg = f"✅ Generated {slides_data.get('total_slides', 0)} slides!"
-                    st.success(success_msg)
-                    
-                    # Show Gamma presentation status - this is the main focus
-                    st.markdown("---")
-                    
-                    # Check if gamma_presentation exists in response
-                    if 'gamma_presentation' not in slides_data:
-                        st.error("❌ **CRITICAL ERROR: Gamma presentation was not generated!**")
-                        st.error("The `gamma_presentation` key is missing from the response.")
-                        st.info("💡 Check the terminal/logs for detailed error messages.")
-                        st.code("Expected key: 'gamma_presentation' in slides_data", language="python")
-                    else:
-                        gamma = slides_data.get('gamma_presentation', {})
-                        gamma_success = gamma.get('success', False)
+                    with st.spinner("Generating slides..."):
+                        # Include AI provider in company data
+                        company_data_with_themes = {
+                            **st.session_state.company_data,
+                            "enhance_with_ai": st.session_state.pending_action_data.get('enhance_with_ai', True),
+                            "ai_provider": st.session_state.pending_action_data.get('ai_provider', 'Auto'),
+                            "gamma_theme": st.session_state.get("gamma_theme", "startup-pitch")
+                        }
                         
-                        # Try multiple possible URL fields (including nested api_response)
-                        gamma_url = (gamma.get('presentation_url') or 
-                                    gamma.get('gammaUrl') or 
-                                    gamma.get('url') or
-                                    gamma.get('api_response', {}).get('gammaUrl') or
-                                    gamma.get('api_response', {}).get('gamma_url') or
-                                    gamma.get('api_response', {}).get('url') or
-                                    None)
-                        edit_url = gamma.get('edit_url') or gamma_url
-                        generation_id = gamma.get('generation_id') or gamma.get('id') or gamma.get('presentation_id')
-                        
-                        # Debug: Print what we got
-                        print(f"\n{'='*80}")
-                        print(f"🔍 UI DEBUG: Gamma presentation data:")
-                        print(f"   Keys: {list(gamma.keys())}")
-                        print(f"   Success: {gamma.get('success', 'NOT SET')}")
-                        print(f"   presentation_url: {gamma.get('presentation_url', 'NOT SET')}")
-                        print(f"   gammaUrl: {gamma.get('gammaUrl', 'NOT SET')}")
-                        print(f"   url: {gamma.get('url', 'NOT SET')}")
-                        print(f"   edit_url: {gamma.get('edit_url', 'NOT SET')}")
-                        if gamma.get('api_response'):
-                            print(f"   api_response keys: {list(gamma.get('api_response', {}).keys())}")
-                            print(f"   api_response.gammaUrl: {gamma.get('api_response', {}).get('gammaUrl', 'NOT SET')}")
-                            print(f"   api_response.url: {gamma.get('api_response', {}).get('url', 'NOT SET')}")
-                        print(f"   Extracted gamma_url: {gamma_url}")
-                        print(f"{'='*80}\n")
-                        
-                        # Always show status first
-                        if gamma_success:
-                            st.success("🎨 **Gamma.ai Presentation Created Successfully!**")
+                        # Execute with choice
+                        if gamma_mode:
+                            slides_data = agent.generate_slides(company_data_with_themes, gamma_only=True)
                         else:
-                            st.warning("⚠️ **Gamma.ai Presentation Status**")
-                            if gamma.get('error'):
-                                st.error(f"**Error:** {gamma.get('error')}")
-                            if gamma.get('message'):
-                                st.info(f"💡 {gamma.get('message')}")
+                            slides_data = agent.generate_slides(company_data_with_themes)
                         
-                        # Always show URLs if available - FORCE DISPLAY
-                        print(f"🔍 UI: About to check URL. gamma_url={gamma_url}, type={type(gamma_url)}")
-                        print(f"🔍 UI: URL check result: {bool(gamma_url and gamma_url != '#' and gamma_url != 'NOT SET' and gamma_url)}")
+                        # Save choice
+                        choice_manager.save_choice(
+                            user_id=user_id,
+                            company_id=company_id,
+                            agent_name="pitch",
+                            action="generate_slides",
+                            choice_id=selected_choice['id'],
+                            choice_data=selected_choice,
+                            context={"gamma_mode": gamma_mode}
+                        )
                         
-                        # Force display - show URL regardless
-                        st.markdown("---")
-                        st.markdown("## 🎨 **Gamma.ai Presentation**")
+                        st.session_state.slides = slides_data
+                        st.session_state.current_slide = 0
+                        st.session_state.pending_action = None
+                        st.session_state.pending_action_data = None
                         
-                        if gamma_url and isinstance(gamma_url, str) and len(gamma_url) > 10:
-                            # URL exists and is valid
-                            st.success(f"✅ **Presentation Created!**")
-                            
-                            col_gamma1, col_gamma2 = st.columns(2)
-                            with col_gamma1:
-                                st.markdown("### 🌐 **View Presentation**")
-                                st.markdown(f"[**🔗 Open in Gamma.ai →**]({gamma_url})")
-                                st.caption("Click the link above to view")
-                                st.text_input("**Copy URL:**", value=gamma_url, key="gamma_view_url", disabled=True)
-                            
-                            with col_gamma2:
-                                st.markdown("### ✏️ **Edit Presentation**")
-                                if edit_url and edit_url != gamma_url:
-                                    st.markdown(f"[**✏️ Edit in Gamma.ai →**]({edit_url})")
-                                    st.caption("Click the link above to edit")
-                                    st.text_input("**Copy URL:**", value=edit_url, key="gamma_edit_url", disabled=True)
-                                else:
-                                    st.info("Same URL for viewing and editing")
-                                    st.text_input("**Copy URL:**", value=gamma_url, key="gamma_edit_url_dup", disabled=True)
-                            
-                            # Show generation ID if available
-                            if generation_id and generation_id != 'NOT SET':
-                                st.caption(f"**Generation ID:** {generation_id}")
-                        else:
-                            # No valid URL - show debug info
-                            st.error("⚠️ **URL extraction failed**")
-                            st.warning(f"Extracted URL: {repr(gamma_url)}")
-                            st.info("💡 Check terminal logs - URL should be there")
-                            with st.expander("🔍 View Full Gamma Response (Debug)"):
-                                st.json(gamma)
-                            if generation_id:
-                                st.caption(f"**Generation ID:** {generation_id}")
-                            if gamma.get('poll_endpoint'):
-                                st.caption(f"**Poll Endpoint:** {gamma.get('poll_endpoint')}")
+                        success_msg = f"✅ Generated {slides_data.get('total_slides', 0)} slides!"
                         
-                        # Export instructions
-                        st.markdown("---")
-                        st.info("""
-                        **📥 How to Download/Export from Gamma:**
-                        1. Click the **"Open in Gamma.ai"** link above
-                        2. In Gamma, click the **Share** button (top-right)
-                        3. Select **Export** from the dropdown
-                        4. Choose format: **PPTX**, **PDF**, or **PNG**
-                        5. The file will download automatically
-                        """)
+                        # Check what was generated
+                        if slides_data.get('pptx_path'):
+                            st.success(success_msg)
                         
-                        # Also offer to generate a regular PPTX from the same slides
-                        st.markdown("---")
-                        st.markdown("### 📊 **Alternative: Download Regular PowerPoint**")
-                        st.caption("Generate a standard PPTX file from the same slides (not Gamma-styled)")
-                        if st.button("📥 Generate & Download PPTX", key="gamma_pptx_download"):
-                            with st.spinner("Generating PowerPoint from slides..."):
-                                try:
-                                    from src.utils.exporters import PitchExporter
-                                    exporter = PitchExporter()
-                                    enhance_with_ai = st.session_state.get('enhance_with_ai', True)
-                                    ai_provider = st.session_state.get('ai_provider', 'auto')
-                                    company_data = st.session_state.get('company_data', {})
-                                    
-                                    pptx_path = exporter.export_to_powerpoint(
-                                        slides_data.get("slides", []),
-                                        slides_data.get("company_name", "Company"),
-                                        include_images=True,
-                                        enhance_with_ai=enhance_with_ai,
-                                        company_data=company_data,
-                                        full_rewrite=True,
-                                        ai_provider=ai_provider
+                        # Show PowerPoint status and download (only if not gamma-only)
+                        if slides_data.get('pptx_path') and not gamma_mode:
+                            pptx_path = Path(slides_data['pptx_path'])
+                            if pptx_path.exists():
+                                st.markdown("---")
+                                st.success("📊 **PowerPoint Generated Successfully!**")
+                                with open(pptx_path, 'rb') as f:
+                                    st.download_button(
+                                        "⬇️ Download PowerPoint Presentation",
+                                        f.read(),
+                                        file_name=pptx_path.name,
+                                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                        help="Download the complete PowerPoint with all slides",
+                                        use_container_width=True
                                     )
-                                    
-                                    if pptx_path and Path(pptx_path).exists():
-                                        with open(pptx_path, 'rb') as f:
-                                            st.download_button(
-                                                "⬇️ Download PowerPoint (PPTX)",
-                                                f.read(),
-                                                file_name=Path(pptx_path).name,
-                                                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                                use_container_width=True
-                                            )
-                                        st.success("✅ PowerPoint generated! Click download button above.")
-                                    else:
-                                        st.error("❌ Failed to generate PowerPoint")
-                                except Exception as e:
-                                    st.error(f"❌ Error generating PowerPoint: {e}")
                         
-                        # Show generation details
-                        with st.expander("🔍 View Full Generation Details"):
-                            st.json(gamma)
-                    
-                    # Don't show PowerPoint options in Gamma-only mode
-                    # Check if PPT was generated despite gamma_only=True (shouldn't happen)
-                    if slides_data.get('pptx_path'):
-                        st.error("⚠️ **ERROR: PowerPoint was generated despite Gamma-only mode!**")
-                        st.error(f"This should not happen. PPT path: {slides_data.get('pptx_path')}")
-                        st.info("💡 Check terminal logs for debugging info.")
-                    elif slides_data.get('pptx_skipped'):
-                        st.success("✅ PowerPoint generation correctly skipped (Gamma-only mode)")
-                    else:
-                        st.info("ℹ️ **Note:** This is Gamma-only mode. PowerPoint generation was skipped. Use the regular 'Generate Slides' button if you need PowerPoint.")
-                    
-                    # Store Gamma result in session state for persistent display
-                    if 'gamma_only_result' not in st.session_state:
-                        st.session_state.gamma_only_result = None
-                    st.session_state.gamma_only_result = slides_data.get('gamma_presentation')
-                    
-                    # Don't rerun here - let the Gamma display stay visible
-                    # The Gamma display is already shown above, no need to rerun
-                    # st.rerun()  # REMOVED - was clearing Gamma display
+                        st.rerun()
+        
+        # Note: Gamma option is now available through choice selection in "Generate Slides" button
+        # This button uses the choice system but auto-selects Gamma for backward compatibility
+        if st.button("🚀 Generate Slides Using Gamma", help="Generate slides and create Gamma.ai presentation"):
+            if st.session_state.company_data:
+                # Set pending action with Gamma as preferred choice (will auto-execute)
+                st.session_state.pending_action = {
+                    "agent_name": "pitch",
+                    "action": "generate_slides",
+                    "action_type": "generate_slides",
+                    "preferred_choice": "gamma_ppt"  # Auto-select Gamma
+                }
+                st.session_state.pending_action_data = {
+                    "enhance_with_ai": enhance_with_ai,
+                    "ai_provider": ai_provider
+                }
+                st.rerun()
             else:
                 st.warning("Please enter company details first!")
         
@@ -2075,6 +2142,28 @@ def main():
                                 "content": combined_response,
                                 "sources": all_sources
                             })
+                            
+                            # Save questionnaire answers as user choices
+                            company_id = st.session_state.get("company_id", "default")
+                            user_id = st.session_state.get("user_id", "anonymous")
+                            
+                            choice_manager.save_choice(
+                                user_id=user_id,
+                                company_id=company_id,
+                                agent_name="patent",
+                                action="questionnaire_answers",
+                                choice_id="patent_questionnaire_completed",
+                                choice_data={
+                                    "label": "Patent Questionnaire Completed",
+                                    "description": "User completed patent analysis questionnaire",
+                                    "value": st.session_state.patent_answers.copy()
+                                },
+                                context={
+                                    "questionnaire_type": "patent_analysis",
+                                    "num_questions": len(visible_questions),
+                                    "invention": invention_context.get('invention_description', '')[:100]
+                                }
+                            )
                             
                             # Reset questionnaire
                             st.session_state.patent_questionnaire_active = False

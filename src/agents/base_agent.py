@@ -71,6 +71,9 @@ class BaseAgent(ABC):
         self.ai_provider = ai_provider.lower()
         self.original_ai_provider = ai_provider.lower()  # Store original provider for fallback logic
         
+        # Initialize use_gemini flag (default to False)
+        self.use_gemini = False
+        
         # Initialize LLM client based on provider
         if self.ai_provider in ["gemini", "auto"]:
             # Try Gemini first - reload env vars to ensure latest values
