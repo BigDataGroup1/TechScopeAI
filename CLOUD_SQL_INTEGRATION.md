@@ -175,3 +175,4 @@ $env:CLOUD_SQL_PASSWORD="YourPassword"
 vector_store = VectorStore(embedding_model=embedding_model, use_local=True)
 ```
 
+

@@ -37,3 +37,4 @@ class Embedder:
         """Get the underlying EmbeddingModel instance."""
         return self.embedding_model
 
+
