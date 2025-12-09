@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .base_agent import BaseAgent
 from ..rag.retriever import Retriever
-from ..utils.web_search import WebSearcher
+# Web search now via MCP client in BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,6 @@ class MarketingAgent(BaseAgent):
             model: LLM model name
         """
         super().__init__("marketing", retriever, model=model)
-        self.web_searcher = WebSearcher(max_results=5)
         self.image_cache_dir = Path("exports/marketing_images")
         self.image_cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info("MarketingAgent initialized")
@@ -165,14 +164,16 @@ class MarketingAgent(BaseAgent):
             top_k=3  # Reduced for faster performance
         )
         
-        # Web search for best practices if needed
+        # Web search for best practices if needed via MCP
         web_results = []
         if marketing_data.get('count', 0) < 3:
             topic_context = f"{marketing_context.get('platform', '')} {marketing_context.get('content_style', '')}"
-            web_results = self.web_searcher.search(
-                f"Instagram marketing best practices {marketing_context.get('campaign_goal', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"Instagram marketing best practices {marketing_context.get('campaign_goal', '')}",
                 topic_context=topic_context
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         content_count = int(marketing_context.get('content_count', '1 post').split()[0])
         
@@ -292,7 +293,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         # Format base response
@@ -344,13 +347,15 @@ When generating responses:
             top_k=5
         )
         
-        # Web search if needed
+        # Web search if needed via MCP
         web_results = []
         if linkedin_data.get('count', 0) < 3:
-            web_results = self.web_searcher.search(
-                f"LinkedIn marketing best practices {marketing_context.get('campaign_goal', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"LinkedIn marketing best practices {marketing_context.get('campaign_goal', '')}",
                 topic_context=marketing_context.get('content_style', '')
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         content_count = int(marketing_context.get('content_count', '1 post').split()[0])
         
@@ -571,11 +576,14 @@ When generating responses:
         """
         logger.info(f"Checking marketing trends: {query}")
         
-        web_results = self.web_searcher.search(
-            query,
+        search_result = self.mcp_client.web_search(
+            query=query,
             topic_context="marketing trends social media",
             max_results=8
         )
+        web_results = []
+        if search_result.get("success"):
+            web_results = search_result.get("results", [])
         
         if not web_results:
             return "No recent trends found. Using general best practices."
@@ -659,10 +667,13 @@ When generating responses:
         if context_data.get('count', 0) < 3:
             logger.info("RAG results insufficient, using web search fallback")
             topic_context = f"{context.get('platform', '')} {context.get('content_style', '')}" if context else query
-            web_results = self.web_searcher.search(
-                query,
+            search_result = self.mcp_client.web_search(
+                query=query,
                 topic_context=topic_context
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""User Question: {query}
 

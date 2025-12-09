@@ -402,34 +402,39 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
                 "sources": all_sources
             }
             
-            # Fetch images for each slide and store in slide data
+            # Fetch images for each slide using MCP image_search tool
             try:
-                from ..utils.image_fetcher import ImageFetcher
-                image_fetcher = ImageFetcher()
-                
                 logger.info("Fetching images for slides...")
                 for slide in slides_result["slides"]:
                     slide_title = slide.get('title', '')
                     slide_content = slide.get('content', '')
                     
                     try:
-                        # Get keywords for image search
-                        keywords = image_fetcher.get_slide_keywords(slide_title, slide_content)
+                        # Extract keywords from slide
+                        keywords = self._extract_slide_keywords(slide_title, slide_content)
                         
-                        # Fetch image
-                        image_path = image_fetcher.get_image_for_slide(slide_title, slide_content, keywords)
+                        # Fetch image using MCP tool
+                        image_result = self.mcp_client.image_search(
+                            slide_title=slide_title,
+                            slide_content=slide_content,
+                            keywords=keywords
+                        )
                         
-                        if image_path and Path(image_path).exists():
-                            # Store absolute path for use in PPT and web
-                            slide["image_path"] = str(Path(image_path).absolute())
-                            logger.info(f"✅ Image fetched for slide: {slide_title}")
+                        if image_result.get("success") and image_result.get("image_path"):
+                            image_path = image_result["image_path"]
+                            if Path(image_path).exists():
+                                # Store absolute path for use in PPT and web
+                                slide["image_path"] = str(Path(image_path).absolute())
+                                logger.info(f"✅ Image fetched for slide: {slide_title}")
+                            else:
+                                slide["image_path"] = None
                         else:
                             slide["image_path"] = None
                     except Exception as e:
                         logger.warning(f"Could not fetch image for slide {slide.get('title', '')}: {e}")
                         slide["image_path"] = None
             except Exception as e:
-                logger.warning(f"Image fetcher not available: {e}")
+                logger.warning(f"Image search not available: {e}")
                 # Set image_path to None for all slides
                 for slide in slides_result["slides"]:
                     slide["image_path"] = None
@@ -686,11 +691,26 @@ Be specific and constructive in your feedback."""
         # Retrieve relevant context
         context_data = self.retrieve_context(query, top_k=5)
         
+        # Use web search if RAG doesn't have enough results
+        web_results = []
+        if context_data.get('count', 0) < 3:
+            logger.info("RAG results insufficient, using web search fallback")
+            topic_context = f"{context.get('industry', '')} {context.get('company_stage', '')}" if context else query
+            search_result = self.mcp_client.web_search(
+                query=query,
+                topic_context=topic_context
+            )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
+        
         # Build prompt
         prompt = f"""User Question: {query}
 
 Relevant Context from Pitch Examples and Templates:
 {context_data.get('context', 'No relevant context found')}
+
+Web Search Results:
+{self._format_web_results(web_results) if web_results else 'No additional web results'}
 
 Please provide helpful advice about pitch decks based on the context above.
 If the user asks about their specific company, use the company context provided.
@@ -720,9 +740,20 @@ IMPORTANT - Ask for clarification and more details:
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
+        # Combine sources from RAG and web search
+        all_sources = context_data.get('sources', [])
+        for web_result in web_results:
+            all_sources.append({
+                'source': web_result.get('url', 'Web Search'),
+                'title': web_result.get('title', ''),
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True  # Flag to identify web search sources
+            })
+        
         return self.format_response(
             response=response_text,
-            sources=context_data.get('sources', [])
+            sources=all_sources
         )
     
     def _analyze_structure(self, pitch_text: str) -> Dict:
@@ -839,4 +870,55 @@ PITCH STRUCTURE ANALYSIS:
 Be constructive, actionable, and specific. Reference the examples and best practices above."""
         
         return prompt
+    
+    def _extract_slide_keywords(self, slide_title: str, slide_content: str) -> List[str]:
+        """Extract relevant keywords from slide for image search."""
+        keywords = []
+        
+        # Add title words (filtered)
+        title_words = slide_title.lower().split()
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "slide"}
+        keywords.extend([w for w in title_words if w not in stop_words and len(w) > 2])
+        
+        # Add content keywords (first few meaningful words)
+        content_words = slide_content.lower().split()[:10]
+        keywords.extend([w for w in content_words if w not in stop_words and len(w) > 3])
+        
+        # Map common pitch deck terms to image-friendly keywords
+        keyword_map = {
+            "problem": "business problem solution",
+            "solution": "innovation technology",
+            "market": "market growth chart",
+            "traction": "growth success metrics",
+            "team": "team collaboration",
+            "competition": "competition business",
+            "financial": "finance money growth",
+            "vision": "future vision",
+            "product": "product technology",
+            "revenue": "revenue growth chart"
+        }
+        
+        for key, mapped in keyword_map.items():
+            if key in slide_title.lower() or key in slide_content.lower():
+                keywords.append(mapped)
+        
+        # Return unique keywords, limit to 3
+        return list(dict.fromkeys(keywords))[:3]
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
 
+    

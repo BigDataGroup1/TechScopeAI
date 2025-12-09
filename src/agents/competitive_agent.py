@@ -313,12 +313,27 @@ Include market context and strategic recommendations."""
         # Retrieve relevant context
         context_data = self.retrieve_context(query, top_k=5)
         
+        # Use web search if RAG doesn't have enough results (especially for news/research queries)
+        web_results = []
+        if context_data.get('count', 0) < 3:
+            logger.info("RAG results insufficient, using web search fallback")
+            topic_context = f"{context.get('industry', '')} {context.get('target_market', '')}" if context else query
+            search_result = self.mcp_client.web_search(
+                query=query,
+                topic_context=topic_context
+            )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
+        
         prompt = f"""User Question: {query}
 
 Relevant Competitive Data:
 {context_data.get('context', 'No relevant context found')}
 
-Provide helpful competitive analysis advice based on the context above."""
+Web Search Results:
+{self._format_web_results(web_results) if web_results else 'No additional web results'}
+
+Provide helpful competitive analysis advice based on the context above. If this is a news or research query, prioritize the web search results for current information."""
         
         if context:
             prompt += f"\n\nCompany Context:\n{json.dumps(context, indent=2)}"
@@ -344,8 +359,35 @@ If asked for more details, provide extensive, in-depth analysis. Structure respo
         company_data = self._extract_company_data(context)
         response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
+        # Combine sources from RAG and web search
+        all_sources = context_data.get('sources', [])
+        for web_result in web_results:
+            all_sources.append({
+                'source': web_result.get('url', 'Web Search'),
+                'title': web_result.get('title', ''),
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True  # Flag to identify web search sources
+            })
+        
         return self.format_response(
             response=response_text,
-            sources=context_data.get('sources', [])
+            sources=all_sources
         )
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
 

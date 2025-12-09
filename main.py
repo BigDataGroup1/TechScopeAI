@@ -17,25 +17,29 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.agents.pitch_agent import PitchAgent
-from src.rag.embedder import Embedder
+from src.rag.embeddings import EmbeddingModel
 from src.rag.vector_store import VectorStore
-from src.rag.retriever import Retriever
+from src.rag.retrieval import RAGRetriever
 from src.data.load_company_data import load_test_company_data, format_company_data_for_pitch, load_company_data
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-def initialize_agent():
-    """Initialize PitchAgent with RAG system."""
+def initialize_agent(use_local: bool = False):
+    """
+    Initialize PitchAgent with RAG system.
+    
+    Args:
+        use_local: If True, use local PostgreSQL. If False (default), use Cloud SQL.
+    """
     logger.info("Initializing PitchAgent...")
     
     # Initialize RAG components
-    embedder = Embedder(use_openai=False)  # Use free embeddings
-    dimension = embedder.get_embedding_dimension()
-    
-    vector_store = VectorStore(category="pitch", dimension=dimension)
-    retriever = Retriever(vector_store, embedder)
+    # VectorStore defaults to Cloud SQL (use use_local=True for local PostgreSQL)
+    embedding_model = EmbeddingModel()
+    vector_store = VectorStore(embedding_model=embedding_model, use_local=use_local)
+    retriever = RAGRetriever(vector_store)
     
     # Initialize agent
     agent = PitchAgent(retriever)
@@ -284,7 +288,10 @@ def main():
         
         logger.info("Launching Streamlit web interface...")
         os.chdir(Path(__file__).parent)
-        subprocess.run(["streamlit", "run", str(streamlit_app)])
+        
+        # Use Python's -m streamlit to ensure we use the venv's streamlit
+        import sys
+        subprocess.run([sys.executable, "-m", "streamlit", "run", str(streamlit_app)])
 
 
 if __name__ == "__main__":

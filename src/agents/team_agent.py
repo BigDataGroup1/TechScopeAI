@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from .base_agent import BaseAgent
 from ..rag.retriever import Retriever
-from ..utils.web_search import WebSearcher
+# Web search now via MCP client in BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,6 @@ class TeamAgent(BaseAgent):
             model: LLM model name
         """
         super().__init__("team", retriever, model=model)
-        self.web_searcher = WebSearcher(max_results=5)
         logger.info("TeamAgent initialized")
     
     def analyze_team_needs(self, company_context: Dict, team_context: Dict) -> Dict:
@@ -197,11 +196,14 @@ class TeamAgent(BaseAgent):
         
         # Web search for role market data
         topic_context = f"{full_context.get('industry', '')} {full_context.get('team_gaps', [])}"
-        web_results = self.web_searcher.search(
-            f"startup roles {full_context.get('industry', '')} {full_context.get('company_stage', '')} salary",
+        search_result = self.mcp_client.web_search(
+            query=f"startup roles {full_context.get('industry', '')} {full_context.get('company_stage', '')} salary",
             topic_context=topic_context,
             max_results=8
         )
+        web_results = []
+        if search_result.get("success"):
+            web_results = search_result.get("results", [])
         
         prompt = f"""Analyze team needs and recommend job roles for this startup:
 
@@ -260,7 +262,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -286,8 +290,10 @@ When generating responses:
         salary_query = f"{role_title} salary {location} {industry} 2025"
         skills_query = f"{role_title} skills requirements {industry}"
         
-        salary_results = self.web_searcher.search(salary_query, topic_context=role_title, max_results=5)
-        skills_results = self.web_searcher.search(skills_query, topic_context=role_title, max_results=5)
+        salary_search = self.mcp_client.web_search(query=salary_query, topic_context=role_title, max_results=5)
+        skills_search = self.mcp_client.web_search(query=skills_query, topic_context=role_title, max_results=5)
+        salary_results = salary_search.get("results", []) if salary_search.get("success") else []
+        skills_results = skills_search.get("results", []) if skills_search.get("success") else []
         
         prompt = f"""Get market data for this job role:
 
@@ -321,7 +327,9 @@ Be specific with numbers and data points."""
             all_sources.append({
                 'source': result.get('url', 'Web Search'),
                 'title': result.get('title', ''),
-                'similarity': result.get('relevance_score', 0)
+                'snippet': result.get('snippet', ''),
+                'similarity': result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -361,10 +369,13 @@ Be specific with numbers and data points."""
         # Web search for JD best practices
         web_results = []
         if jd_data.get('count', 0) < 3:
-            web_results = self.web_searcher.search(
-                f"job description template {role_title} startup",
+            search_result = self.mcp_client.web_search(
+                query=f"job description template {role_title} startup",
                 topic_context=role_title
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         # Combine all context
         full_context = {**company_context, **team_context, **role_details}
@@ -440,7 +451,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -467,10 +480,13 @@ When generating responses:
         if context_data.get('count', 0) < 3:
             logger.info("RAG results insufficient, using web search fallback")
             topic_context = f"{context.get('industry', '')} {context.get('company_stage', '')}" if context else query
-            web_results = self.web_searcher.search(
-                query,
+            search_result = self.mcp_client.web_search(
+                query=query,
                 topic_context=topic_context
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""User Question: {query}
 
@@ -513,7 +529,9 @@ IMPORTANT - Ask for clarification and more details:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
