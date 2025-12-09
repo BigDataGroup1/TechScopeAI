@@ -376,7 +376,7 @@ Be constructive, actionable, and specific. Reference the examples and best pract
             sources=all_sources
         )
     
-    def generate_slides(self, company_details: Dict) -> Dict:
+    def generate_slides(self, company_details: Dict, gamma_only: bool = False) -> Dict:
         """
         Generate structured pitch deck slides from company details.
         
@@ -549,44 +549,139 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
                 if "talking_points" not in slide:
                     slide["talking_points"] = slide.get("key_points", [])
             
-            # Auto-generate PowerPoint if available
+            # Auto-generate PowerPoint if not in gamma_only mode
+            print(f"\n{'='*80}")
+            print(f"🔍 DEBUG: gamma_only = {gamma_only}")
+            print(f"{'='*80}\n")
+            logger.info(f"{'='*80}")
+            logger.info(f"🔍 DEBUG: gamma_only parameter = {gamma_only}")
+            logger.info(f"{'='*80}")
+            
+            if not gamma_only:
+                print("📊 Generating PowerPoint (normal mode)...")
+                logger.info("📊 Generating PowerPoint (normal mode)...")
+                try:
+                    from ..utils.exporters import PitchExporter
+                    exporter = PitchExporter()
+                    # Get AI enhancement preference from company_data (default: True)
+                    enhance_with_ai = company_details.get("enhance_with_ai", True)
+                    ai_provider = company_details.get("ai_provider", "auto")  # 🆕 Get AI provider preference
+                    # Pass company_data for financial charts and intelligent filtering
+                    pptx_path = exporter.export_to_powerpoint(
+                        slides_result["slides"],
+                        slides_result["company_name"],
+                        include_images=True,
+                        enhance_with_ai=enhance_with_ai,
+                        company_data=company_details,  # 🆕 Pass company data for charts/filtering
+                        full_rewrite=True,  # 🆕 Enable full AI rewrite
+                        ai_provider=ai_provider  # 🆕 Pass AI provider preference
+                    )
+                    if pptx_path:
+                        slides_result["pptx_path"] = pptx_path
+                        print(f"✅ PowerPoint generated: {pptx_path}")
+                        logger.info(f"Auto-generated PowerPoint: {pptx_path}")
+                except Exception as e:
+                    print(f"❌ PowerPoint generation failed: {e}")
+                    logger.error(f"Could not auto-generate PowerPoint: {e}", exc_info=True)
+                    # Store error info
+                    slides_result["pptx_error"] = str(e)
+            else:
+                print("⏭️ SKIPPING PowerPoint generation (gamma_only=True)")
+                logger.info("⏭️ SKIPPING PowerPoint generation (gamma_only=True)")
+                # Explicitly set pptx_path to None to prevent any fallback
+                slides_result["pptx_path"] = None
+                slides_result["pptx_skipped"] = True
+            
+            # Generate Gamma.ai presentation (ALWAYS generate, but especially important in gamma_only mode)
+            print(f"\n{'='*80}")
+            print(f"🚀 GAMMA GENERATION STARTED (gamma_only={gamma_only})")
+            print(f"{'='*80}\n")
+            logger.info(f"{'='*80}")
+            logger.info(f"🚀 GAMMA GENERATION STARTED (gamma_only={gamma_only})")
+            logger.info(f"{'='*80}")
             try:
-                from ..utils.exporters import PitchExporter
-                exporter = PitchExporter()
-                # Get AI enhancement preference from company_data (default: True)
+                from ..utils.gamma_integration import GammaIntegration
+                gamma = GammaIntegration()
+                
+                # Log API key status
+                if gamma.api_key:
+                    logger.info(f"✅ GAMMA_API_KEY found: {gamma.api_key[:10]}...")
+                else:
+                    logger.warning("⚠️ GAMMA_API_KEY NOT FOUND - Will run in demo mode")
+                
+                theme_id = company_details.get("gamma_theme", "startup-pitch")
                 enhance_with_ai = company_details.get("enhance_with_ai", True)
-                ai_provider = company_details.get("ai_provider", "auto")  # 🆕 Get AI provider preference
-                # Pass company_data for financial charts and intelligent filtering
-                pptx_path = exporter.export_to_powerpoint(
+                
+                logger.info(f"Creating Gamma presentation with:")
+                logger.info(f"  - Company: {slides_result['company_name']}")
+                logger.info(f"  - Slides: {len(slides_result['slides'])}")
+                logger.info(f"  - Theme: {theme_id}")
+                logger.info(f"  - Enhance with AI: {enhance_with_ai}")
+                
+                gamma_result = gamma.create_presentation(
                     slides_result["slides"],
                     slides_result["company_name"],
-                    include_images=True,
-                    enhance_with_ai=enhance_with_ai,
-                    company_data=company_details,  # 🆕 Pass company data for charts/filtering
-                    full_rewrite=True,  # 🆕 Enable full AI rewrite
-                    ai_provider=ai_provider  # 🆕 Pass AI provider preference
+                    theme_id=theme_id,
+                    enhance_with_ai=enhance_with_ai
                 )
-                if pptx_path:
-                    slides_result["pptx_path"] = pptx_path
-                    logger.info(f"Auto-generated PowerPoint: {pptx_path}")
-            except Exception as e:
-                logger.error(f"Could not auto-generate PowerPoint: {e}", exc_info=True)
-                # Store error info
-                slides_result["pptx_error"] = str(e)
-            
-            # Gamma and Canva removed - not working
-                if canva_result.get("success"):
-                    logger.info(f"✅ Canva presentation created: {canva_result.get('design_url')}")
+                
+                slides_result["gamma_presentation"] = gamma_result
+                
+                logger.info(f"{'='*60}")
+                if gamma_result.get("success"):
+                    logger.info(f"✅ SUCCESS: Gamma presentation created!")
+                    logger.info(f"   URL: {gamma_result.get('presentation_url', 'N/A')}")
+                    logger.info(f"   Generation ID: {gamma_result.get('generation_id', 'N/A')}")
                 else:
-                    logger.warning(f"Canva presentation creation failed: {canva_result.get('error', 'Unknown')}")
+                    logger.error(f"❌ FAILED: Gamma presentation creation failed")
+                    logger.error(f"   Error: {gamma_result.get('error', 'Unknown')}")
+                    logger.error(f"   Message: {gamma_result.get('message', 'No message')}")
+                    if gamma_result.get('generation_id'):
+                        logger.info(f"   Generation ID: {gamma_result.get('generation_id')}")
+                logger.info(f"{'='*60}")
+                
             except Exception as e:
-                logger.error(f"Could not create Canva presentation: {e}", exc_info=True)
-                # Store error info for debugging
-                slides_result["canva_presentation"] = {
+                logger.error(f"{'='*60}")
+                logger.error(f"❌ EXCEPTION: Could not create Gamma presentation")
+                logger.error(f"   Error: {e}", exc_info=True)
+                logger.error(f"{'='*60}")
+                slides_result["gamma_presentation"] = {
                     "success": False,
                     "error": str(e),
-                    "message": f"Canva generation failed: {e}"
+                    "message": f"Gamma generation failed: {e}",
+                    "exception_type": type(e).__name__
                 }
+            
+            # Canva integration commented out - requires OAuth 2.0 setup
+            # Uncomment and configure OAuth if needed
+            # try:
+            #     from ..utils.canva_integration import CanvaIntegration
+            #     canva = CanvaIntegration()
+            #     template_id = company_details.get("canva_template", "pitch-deck-modern")
+            #     enhance_visuals = company_details.get("enhance_with_ai", True)
+            #     canva_result = canva.create_presentation(
+            #         slides_result["slides"],
+            #         slides_result["company_name"],
+            #         template_id=template_id,
+            #         enhance_visuals=enhance_visuals
+            #     )
+            #     slides_result["canva_presentation"] = canva_result
+            #     if canva_result.get("success"):
+            #         logger.info(f"✅ Canva presentation created: {canva_result.get('design_url')}")
+            #     else:
+            #         logger.warning(f"Canva presentation creation failed: {canva_result.get('error', 'Unknown')}")
+            # except Exception as e:
+            #     logger.error(f"Could not create Canva presentation: {e}", exc_info=True)
+            #     slides_result["canva_presentation"] = {
+            #         "success": False,
+            #         "error": str(e),
+            #         "message": f"Canva generation failed: {e}"
+            #     }
+            slides_result["canva_presentation"] = {
+                "success": False,
+                "error": "Canva integration disabled",
+                "message": "Canva integration is currently disabled. It requires OAuth 2.0 setup."
+            }
             
             return slides_result
         except json.JSONDecodeError as e:
@@ -954,6 +1049,196 @@ Include all standard sections and make it specific to their industry, stage, and
 Use the examples above as inspiration but make it original and personalized."""
         
         return prompt
+    
+    def _build_evaluation_prompt(self, pitch_text: str, structure: Dict,
+                                 similar_pitches: List[Dict], best_practices: List[Dict],
+                                 failure_lessons: List[Dict], company_context: Optional[Dict]) -> str:
+        """Build prompt for pitch evaluation."""
+        prompt = f"""Evaluate this pitch deck:
+
+PITCH TEXT:
+{pitch_text[:2000]}...  # Truncate if too long
+
+PITCH STRUCTURE ANALYSIS:
+{json.dumps(structure, indent=2)}
+
+"""
+        
+        if similar_pitches:
+            prompt += f"SIMILAR SUCCESSFUL PITCHES (for comparison):\n"
+            for i, pitch in enumerate(similar_pitches[:3], 1):
+                prompt += f"[{i}] {pitch.get('content', '')[:300]}...\n\n"
+        
+        if best_practices:
+            prompt += f"BEST PRACTICES:\n"
+            for i, practice in enumerate(best_practices[:3], 1):
+                prompt += f"[{i}] {practice.get('content', '')[:300]}...\n\n"
+        
+        if failure_lessons:
+            prompt += f"COMMON MISTAKES (from failures):\n"
+            for lesson in failure_lessons[:2]:
+                prompt += f"- {lesson.get('content', '')[:200]}...\n\n"
+        
+        if company_context:
+            prompt += f"COMPANY CONTEXT:\n{json.dumps(company_context, indent=2)}\n\n"
+        
+        prompt += """TASK: Provide a comprehensive evaluation:
+1. Overall score (1-10) with reasoning
+2. Strengths (what's working well)
+3. Weaknesses (what needs improvement)
+4. Specific improvement suggestions with examples
+5. Comparison to successful pitches
+
+Be constructive, actionable, and specific. Reference the examples and best practices above."""
+        
+        return prompt
+    
+    def _extract_slide_keywords(self, slide_title: str, slide_content: str) -> List[str]:
+        """Extract relevant keywords from slide for image search."""
+        keywords = []
+        
+        # Add title words (filtered)
+        title_words = slide_title.lower().split()
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "slide"}
+        keywords.extend([w for w in title_words if w not in stop_words and len(w) > 2])
+        
+        # Add content keywords (first few meaningful words)
+        content_words = slide_content.lower().split()[:10]
+        keywords.extend([w for w in content_words if w not in stop_words and len(w) > 3])
+        
+        # Map common pitch deck terms to image-friendly keywords
+        keyword_map = {
+            "problem": "business problem solution",
+            "solution": "innovation technology",
+            "market": "market growth chart",
+            "traction": "growth success metrics",
+            "team": "team collaboration",
+            "competition": "competition business",
+            "financial": "finance money growth",
+            "vision": "future vision",
+            "product": "product technology",
+            "revenue": "revenue growth chart"
+        }
+        
+        for key, mapped in keyword_map.items():
+            if key in slide_title.lower() or key in slide_content.lower():
+                keywords.append(mapped)
+        
+        # Return unique keywords, limit to 3
+        return list(dict.fromkeys(keywords))[:3]
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
+
+
+    
+    def _build_evaluation_prompt(self, pitch_text: str, structure: Dict,
+                                 similar_pitches: List[Dict], best_practices: List[Dict],
+                                 failure_lessons: List[Dict], company_context: Optional[Dict]) -> str:
+        """Build prompt for pitch evaluation."""
+        prompt = f"""Evaluate this pitch deck:
+
+PITCH TEXT:
+{pitch_text[:2000]}...  # Truncate if too long
+
+PITCH STRUCTURE ANALYSIS:
+{json.dumps(structure, indent=2)}
+
+"""
+        
+        if similar_pitches:
+            prompt += f"SIMILAR SUCCESSFUL PITCHES (for comparison):\n"
+            for i, pitch in enumerate(similar_pitches[:3], 1):
+                prompt += f"[{i}] {pitch.get('content', '')[:300]}...\n\n"
+        
+        if best_practices:
+            prompt += f"BEST PRACTICES:\n"
+            for i, practice in enumerate(best_practices[:3], 1):
+                prompt += f"[{i}] {practice.get('content', '')[:300]}...\n\n"
+        
+        if failure_lessons:
+            prompt += f"COMMON MISTAKES (from failures):\n"
+            for lesson in failure_lessons[:2]:
+                prompt += f"- {lesson.get('content', '')[:200]}...\n\n"
+        
+        if company_context:
+            prompt += f"COMPANY CONTEXT:\n{json.dumps(company_context, indent=2)}\n\n"
+        
+        prompt += """TASK: Provide a comprehensive evaluation:
+1. Overall score (1-10) with reasoning
+2. Strengths (what's working well)
+3. Weaknesses (what needs improvement)
+4. Specific improvement suggestions with examples
+5. Comparison to successful pitches
+
+Be constructive, actionable, and specific. Reference the examples and best practices above."""
+        
+        return prompt
+    
+    def _extract_slide_keywords(self, slide_title: str, slide_content: str) -> List[str]:
+        """Extract relevant keywords from slide for image search."""
+        keywords = []
+        
+        # Add title words (filtered)
+        title_words = slide_title.lower().split()
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "slide"}
+        keywords.extend([w for w in title_words if w not in stop_words and len(w) > 2])
+        
+        # Add content keywords (first few meaningful words)
+        content_words = slide_content.lower().split()[:10]
+        keywords.extend([w for w in content_words if w not in stop_words and len(w) > 3])
+        
+        # Map common pitch deck terms to image-friendly keywords
+        keyword_map = {
+            "problem": "business problem solution",
+            "solution": "innovation technology",
+            "market": "market growth chart",
+            "traction": "growth success metrics",
+            "team": "team collaboration",
+            "competition": "competition business",
+            "financial": "finance money growth",
+            "vision": "future vision",
+            "product": "product technology",
+            "revenue": "revenue growth chart"
+        }
+        
+        for key, mapped in keyword_map.items():
+            if key in slide_title.lower() or key in slide_content.lower():
+                keywords.append(mapped)
+        
+        # Return unique keywords, limit to 3
+        return list(dict.fromkeys(keywords))[:3]
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
+
+
     
     def _build_evaluation_prompt(self, pitch_text: str, structure: Dict,
                                  similar_pitches: List[Dict], best_practices: List[Dict],

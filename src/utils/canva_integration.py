@@ -10,6 +10,10 @@ import json
 import requests
 from typing import Dict, List, Optional
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -80,14 +84,17 @@ class CanvaIntegration:
         if not self.api_key:
             logger.warning("CANVA_API_KEY not found. Canva features will be limited.")
         
-        # Canva API base URL (update when official API is available)
-        self.base_url = "https://api.canva.com"  # Placeholder - update with actual API URL
+        # Canva API base URL - Canva uses OAuth 2.0, but we'll try direct API key first
+        self.base_url = "https://api.canva.com/rest/v1"
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         } if self.api_key else {}
         
-        logger.info("CanvaIntegration initialized")
+        if self.api_key:
+            logger.info("CanvaIntegration initialized with API key")
+        else:
+            logger.warning("CanvaIntegration initialized without API key - will use demo mode")
     
     def get_available_templates(self) -> List[Dict]:
         """
@@ -207,15 +214,50 @@ class CanvaIntegration:
         """
         Create design via Canva API.
         
-        Note: This is a placeholder implementation.
-        Update with actual Canva API endpoints when available.
+        Note: Canva uses OAuth 2.0 for authentication. This implementation
+        attempts to use the API key directly, but may require OAuth flow for full functionality.
         """
-        try:
-            # Placeholder API call - update with actual Canva API
-            # Example structure (update based on actual API):
-            payload = {
-                "design": design_data,
+        if demo_mode:
+            logger.info("Canva running in demo mode - returning placeholder response")
+            title_slug = design_data["title"].lower().replace(" ", "-").replace(":", "").replace("---", "-")
+            return {
+                "success": True,
+                "design_id": f"canva_demo_{title_slug}",
+                "design_url": f"https://www.canva.com/design/{title_slug}",
+                "edit_url": f"https://www.canva.com/design/{title_slug}/edit",
                 "template": template_id,
+                "visual_enhanced": True,
+                "demo_mode": True,
+                "message": "Canva presentation created (demo mode - add CANVA_API_KEY to .env for real API)"
+            }
+        
+        try:
+            # Prepare slides for Canva API
+            slides_content = []
+            for slide in design_data.get("slides", []):
+                slide_obj = {
+                    "title": slide.get("title", "Untitled"),
+                    "content": slide.get("content", ""),
+                    "key_points": slide.get("key_points", []),
+                    "slide_number": slide.get("slide_number", 0)
+                }
+                if slide.get("image_path"):
+                    slide_obj["image_url"] = slide.get("image_path")
+                slides_content.append(slide_obj)
+            
+            # Try different Canva API endpoints
+            endpoints_to_try = [
+                f"{self.base_url}/designs",
+                f"{self.base_url}/presentations",
+                "https://api.canva.com/v1/designs",
+                "https://api.canva.com/rest/v1/designs"
+            ]
+            
+            payload = {
+                "title": design_data.get("title", "Presentation"),
+                "type": "presentation",
+                "template_id": template_id,
+                "slides": slides_content,
                 "options": {
                     "enhance_visuals": True,
                     "auto_layout": True,
@@ -224,41 +266,251 @@ class CanvaIntegration:
                 }
             }
             
-            # Uncomment when API is available:
-            # response = requests.post(
-            #     f"{self.base_url}/v1/designs",
-            #     headers=self.headers,
-            #     json=payload,
-            #     timeout=30
-            # )
-            # response.raise_for_status()
-            # result = response.json()
+            last_error = None
+            for endpoint in endpoints_to_try:
+                try:
+                    logger.info(f"Attempting Canva API call to: {endpoint}")
+                    response = requests.post(
+                        endpoint,
+                        headers=self.headers,
+                        json=payload,
+                        timeout=30
+                    )
+                    
+                    # Check if request was successful
+                    if response.status_code == 200 or response.status_code == 201:
+                        result = response.json()
+                        logger.info(f"✅ Canva API call successful to {endpoint}")
+                        
+                        # Extract design URL from response
+                        design_url = result.get("url") or result.get("design_url") or result.get("link")
+                        design_id = result.get("id") or result.get("design_id")
+                        edit_url = result.get("edit_url") or result.get("edit_link")
+                        
+                        return {
+                            "success": True,
+                            "design_id": design_id or f"canva_{design_data['title'].lower().replace(' ', '-')}",
+                            "design_url": design_url or f"https://www.canva.com/design/{design_id}",
+                            "edit_url": edit_url or f"https://www.canva.com/design/{design_id}/edit",
+                            "template": template_id,
+                            "visual_enhanced": True,
+                            "demo_mode": False,
+                            "message": "Canva presentation created successfully",
+                            "api_response": result
+                        }
+                    elif response.status_code == 401:
+                        logger.error(f"Canva API authentication failed - check your CANVA_API_KEY")
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get("error", {}).get("message", "Authentication failed")
+                        except:
+                            error_msg = response.text[:200] if hasattr(response, 'text') else "Authentication failed"
+                        
+                        return {
+                            "success": False,
+                            "error": "Authentication failed",
+                            "message": f"Canva API requires OAuth 2.0 authentication, not a simple API key. The CANVA_API_KEY you provided is not valid for direct API access. To use Canva integration, you need to set up OAuth 2.0 flow. See: https://www.canva.dev/docs/connect/authentication/",
+                            "status_code": 401,
+                            "oauth_required": True,
+                            "docs_url": "https://www.canva.dev/docs/connect/authentication/"
+                        }
+                    elif response.status_code == 404:
+                        # Try next endpoint
+                        last_error = f"Endpoint not found: {endpoint}"
+                        continue
+                    else:
+                        error_text = response.text[:500] if hasattr(response, 'text') else str(response.status_code)
+                        last_error = f"API returned status {response.status_code}: {error_text}"
+                        logger.warning(f"Canva API returned {response.status_code}: {error_text}")
+                        continue
+                        
+                except requests.exceptions.RequestException as e:
+                    last_error = str(e)
+                    logger.debug(f"Request to {endpoint} failed: {e}")
+                    continue
             
-            # For now, return a placeholder response
-            if demo_mode:
-                logger.info("Canva running in demo mode - returning placeholder response")
-            else:
-                logger.info("Canva API integration - placeholder (update with actual API)")
-            
-            title_slug = design_data["title"].lower().replace(" ", "-").replace(":", "").replace("---", "-")
-            
+            # If all endpoints failed, return error
+            logger.error(f"All Canva API endpoints failed. Last error: {last_error}")
             return {
-                "success": True,
-                "design_id": f"canva_{title_slug}",
-                "design_url": f"https://www.canva.com/design/{title_slug}",
-                "edit_url": f"https://www.canva.com/design/{title_slug}/edit",
-                "template": template_id,
-                "visual_enhanced": True,
-                "demo_mode": demo_mode,
-                "message": "Canva presentation created" + (" (demo mode)" if demo_mode else " (placeholder - update with actual API)"),
-                "note": "This is a placeholder. Update _create_via_api() with actual Canva API endpoints." if not demo_mode else "Running in demo mode. Add CANVA_API_KEY to .env for real API integration."
+                "success": False,
+                "error": last_error or "All API endpoints failed",
+                "message": "Failed to create design via Canva API. Canva may require OAuth 2.0 authentication instead of API key.",
+                "note": "Check https://www.canva.dev/docs/connect/ for OAuth 2.0 setup instructions. Canva Connect APIs use OAuth, not simple API keys."
             }
             
         except Exception as e:
-            logger.error(f"Canva API error: {e}")
+            logger.error(f"Canva API error: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
-                "message": "Failed to create design via Canva API"
+                "message": f"Failed to create design via Canva API: {e}"
+            }
+
+
+                }
+            }
+            
+            last_error = None
+            for endpoint in endpoints_to_try:
+                try:
+                    logger.info(f"Attempting Canva API call to: {endpoint}")
+                    response = requests.post(
+                        endpoint,
+                        headers=self.headers,
+                        json=payload,
+                        timeout=30
+                    )
+                    
+                    # Check if request was successful
+                    if response.status_code == 200 or response.status_code == 201:
+                        result = response.json()
+                        logger.info(f"✅ Canva API call successful to {endpoint}")
+                        
+                        # Extract design URL from response
+                        design_url = result.get("url") or result.get("design_url") or result.get("link")
+                        design_id = result.get("id") or result.get("design_id")
+                        edit_url = result.get("edit_url") or result.get("edit_link")
+                        
+                        return {
+                            "success": True,
+                            "design_id": design_id or f"canva_{design_data['title'].lower().replace(' ', '-')}",
+                            "design_url": design_url or f"https://www.canva.com/design/{design_id}",
+                            "edit_url": edit_url or f"https://www.canva.com/design/{design_id}/edit",
+                            "template": template_id,
+                            "visual_enhanced": True,
+                            "demo_mode": False,
+                            "message": "Canva presentation created successfully",
+                            "api_response": result
+                        }
+                    elif response.status_code == 401:
+                        logger.error(f"Canva API authentication failed - check your CANVA_API_KEY")
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get("error", {}).get("message", "Authentication failed")
+                        except:
+                            error_msg = response.text[:200] if hasattr(response, 'text') else "Authentication failed"
+                        
+                        return {
+                            "success": False,
+                            "error": "Authentication failed",
+                            "message": f"Canva API requires OAuth 2.0 authentication, not a simple API key. The CANVA_API_KEY you provided is not valid for direct API access. To use Canva integration, you need to set up OAuth 2.0 flow. See: https://www.canva.dev/docs/connect/authentication/",
+                            "status_code": 401,
+                            "oauth_required": True,
+                            "docs_url": "https://www.canva.dev/docs/connect/authentication/"
+                        }
+                    elif response.status_code == 404:
+                        # Try next endpoint
+                        last_error = f"Endpoint not found: {endpoint}"
+                        continue
+                    else:
+                        error_text = response.text[:500] if hasattr(response, 'text') else str(response.status_code)
+                        last_error = f"API returned status {response.status_code}: {error_text}"
+                        logger.warning(f"Canva API returned {response.status_code}: {error_text}")
+                        continue
+                        
+                except requests.exceptions.RequestException as e:
+                    last_error = str(e)
+                    logger.debug(f"Request to {endpoint} failed: {e}")
+                    continue
+            
+            # If all endpoints failed, return error
+            logger.error(f"All Canva API endpoints failed. Last error: {last_error}")
+            return {
+                "success": False,
+                "error": last_error or "All API endpoints failed",
+                "message": "Failed to create design via Canva API. Canva may require OAuth 2.0 authentication instead of API key.",
+                "note": "Check https://www.canva.dev/docs/connect/ for OAuth 2.0 setup instructions. Canva Connect APIs use OAuth, not simple API keys."
+            }
+            
+        except Exception as e:
+            logger.error(f"Canva API error: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to create design via Canva API: {e}"
+            }
+
+
+                }
+            }
+            
+            last_error = None
+            for endpoint in endpoints_to_try:
+                try:
+                    logger.info(f"Attempting Canva API call to: {endpoint}")
+                    response = requests.post(
+                        endpoint,
+                        headers=self.headers,
+                        json=payload,
+                        timeout=30
+                    )
+                    
+                    # Check if request was successful
+                    if response.status_code == 200 or response.status_code == 201:
+                        result = response.json()
+                        logger.info(f"✅ Canva API call successful to {endpoint}")
+                        
+                        # Extract design URL from response
+                        design_url = result.get("url") or result.get("design_url") or result.get("link")
+                        design_id = result.get("id") or result.get("design_id")
+                        edit_url = result.get("edit_url") or result.get("edit_link")
+                        
+                        return {
+                            "success": True,
+                            "design_id": design_id or f"canva_{design_data['title'].lower().replace(' ', '-')}",
+                            "design_url": design_url or f"https://www.canva.com/design/{design_id}",
+                            "edit_url": edit_url or f"https://www.canva.com/design/{design_id}/edit",
+                            "template": template_id,
+                            "visual_enhanced": True,
+                            "demo_mode": False,
+                            "message": "Canva presentation created successfully",
+                            "api_response": result
+                        }
+                    elif response.status_code == 401:
+                        logger.error(f"Canva API authentication failed - check your CANVA_API_KEY")
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get("error", {}).get("message", "Authentication failed")
+                        except:
+                            error_msg = response.text[:200] if hasattr(response, 'text') else "Authentication failed"
+                        
+                        return {
+                            "success": False,
+                            "error": "Authentication failed",
+                            "message": f"Canva API requires OAuth 2.0 authentication, not a simple API key. The CANVA_API_KEY you provided is not valid for direct API access. To use Canva integration, you need to set up OAuth 2.0 flow. See: https://www.canva.dev/docs/connect/authentication/",
+                            "status_code": 401,
+                            "oauth_required": True,
+                            "docs_url": "https://www.canva.dev/docs/connect/authentication/"
+                        }
+                    elif response.status_code == 404:
+                        # Try next endpoint
+                        last_error = f"Endpoint not found: {endpoint}"
+                        continue
+                    else:
+                        error_text = response.text[:500] if hasattr(response, 'text') else str(response.status_code)
+                        last_error = f"API returned status {response.status_code}: {error_text}"
+                        logger.warning(f"Canva API returned {response.status_code}: {error_text}")
+                        continue
+                        
+                except requests.exceptions.RequestException as e:
+                    last_error = str(e)
+                    logger.debug(f"Request to {endpoint} failed: {e}")
+                    continue
+            
+            # If all endpoints failed, return error
+            logger.error(f"All Canva API endpoints failed. Last error: {last_error}")
+            return {
+                "success": False,
+                "error": last_error or "All API endpoints failed",
+                "message": "Failed to create design via Canva API. Canva may require OAuth 2.0 authentication instead of API key.",
+                "note": "Check https://www.canva.dev/docs/connect/ for OAuth 2.0 setup instructions. Canva Connect APIs use OAuth, not simple API keys."
+            }
+            
+        except Exception as e:
+            logger.error(f"Canva API error: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to create design via Canva API: {e}"
             }
 

@@ -69,10 +69,12 @@ class BaseAgent(ABC):
         self.model = model
         self.temperature = temperature
         self.ai_provider = ai_provider.lower()
+        self.original_ai_provider = ai_provider.lower()  # Store original provider for fallback logic
         
         # Initialize LLM client based on provider
         if self.ai_provider in ["gemini", "auto"]:
-            # Try Gemini first
+            # Try Gemini first - reload env vars to ensure latest values
+            load_dotenv()  # Reload to ensure .env is loaded
             gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             if gemini_key and GEMINI_AVAILABLE:
                 try:
@@ -106,9 +108,14 @@ class BaseAgent(ABC):
             if not OPENAI_AVAILABLE:
                 raise ImportError("openai package required. Install with: pip install openai")
             
+            # If model name is a Gemini model, use OpenAI's default model instead
+            if "gemini" in self.model.lower():
+                logger.warning(f"Model '{self.model}' is a Gemini model, but Gemini is not available. Using OpenAI default model instead.")
+                self.model = "gpt-4-turbo-preview"  # Default OpenAI model
+            
             self.client = OpenAI(api_key=api_key)
             self.use_gemini = False
-            logger.info(f"✅ Using OpenAI for {category} agent")
+            logger.info(f"✅ Using OpenAI for {category} agent with model: {self.model}")
         
         # Initialize MCP client for tools (web search, image search, etc.)
         self.mcp_client = MCPClient()
@@ -291,6 +298,10 @@ class BaseAgent(ABC):
                 if self.ai_provider == "auto":
                     logger.info("Falling back to OpenAI...")
                     self.use_gemini = False
+                    # If model is Gemini, change to OpenAI model
+                    if "gemini" in self.model.lower():
+                        logger.warning(f"Changing model from '{self.model}' to OpenAI default")
+                        self.model = "gpt-4-turbo-preview"
                     # Initialize OpenAI client if not already done
                     if not hasattr(self, 'client') or self.client is None:
                         api_key = os.getenv("OPENAI_API_KEY")
@@ -323,8 +334,75 @@ class BaseAgent(ABC):
             )
             return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            raise
+            error_str = str(e)
+            # Check if it's a quota/rate limit error and we're in auto mode
+            # Use original_ai_provider to check, since ai_provider may have been changed to "openai" during init
+            is_quota_error = ("429" in error_str or "quota" in error_str.lower() or "rate limit" in error_str.lower() or "insufficient_quota" in error_str.lower())
+            
+            if (self.original_ai_provider == "auto" or self.ai_provider == "auto") and is_quota_error:
+                logger.warning(f"OpenAI quota exceeded or rate limited: {e}")
+                logger.info("Attempting to fallback to Gemini...")
+                
+                # Try to use Gemini as fallback - reload environment variables
+                from dotenv import load_dotenv
+                load_dotenv()  # Reload to ensure we have latest env vars
+                
+                gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                logger.info(f"GEMINI_API_KEY found: {'YES' if gemini_key else 'NO'}")
+                
+                # Try to import Gemini dynamically (in case it's installed but GEMINI_AVAILABLE wasn't set)
+                gemini_imported = False
+                genai = None
+                try:
+                    import google.generativeai as genai
+                    gemini_imported = True
+                    logger.info("[OK] google-generativeai imported successfully")
+                except ImportError:
+                    logger.warning("[X] google-generativeai not installed. Cannot use Gemini fallback.")
+                    logger.info("Install with: pip install google-generativeai")
+                
+                if gemini_key and gemini_imported:
+                    try:
+                        genai.configure(api_key=gemini_key)
+                        # Use Gemini model
+                        if "gemini" in self.model.lower():
+                            gemini_model = genai.GenerativeModel(self.model)
+                        else:
+                            gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                        
+                        # Combine system prompt and user prompt for Gemini
+                        enhanced_system_prompt = system_prompt or ""
+                        if company_data:
+                            company_name = company_data.get('company_name', 'this startup')
+                            enhanced_system_prompt += f"\n\nIMPORTANT: All responses must be personalized specifically for {company_name}. Use the company's specific details, industry, problem, solution, and context provided. Make responses relevant and tailored to this startup's unique situation."
+                        
+                        full_prompt = f"{enhanced_system_prompt}\n\n{personalized_prompt}" if enhanced_system_prompt else personalized_prompt
+                        
+                        logger.info("Using Gemini as fallback for OpenAI quota error")
+                        response = gemini_model.generate_content(
+                            full_prompt,
+                            generation_config={
+                                "temperature": self.temperature,
+                            }
+                        )
+                        return response.text
+                    except Exception as gemini_error:
+                        logger.error(f"Gemini fallback also failed: {gemini_error}")
+                        raise e  # Raise original OpenAI error
+                else:
+                    if not gemini_key:
+                        logger.warning("[!] GEMINI_API_KEY not found in environment. Cannot fallback to Gemini.")
+                        logger.info("[TIP] Add GEMINI_API_KEY to your .env file to enable automatic fallback.")
+                    if not gemini_imported:
+                        logger.warning("[!] google-generativeai not installed. Cannot fallback to Gemini.")
+                        logger.info("[TIP] Install with: pip install google-generativeai")
+                    # Re-raise the original error if fallback can't proceed
+                    logger.error(f"Error generating response: {e}")
+                    raise
+            else:
+                # Not a quota error or not in auto mode - just re-raise
+                logger.error(f"Error generating response: {e}")
+                raise
     
     def format_response(self, response: str, sources: List[Dict]) -> Dict:
         """
