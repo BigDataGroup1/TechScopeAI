@@ -103,11 +103,18 @@ class UserChoiceManager:
                 ],
                 "generate_image": [
                     {
-                        "id": "ai_generated",
-                        "label": "🤖 AI Generated",
-                        "description": "Generate custom AI images",
-                        "icon": "🤖",
-                        "value": {"image_type": "ai"}
+                        "id": "dalle_generated",
+                        "label": "🎨 DALL-E 3 (OpenAI)",
+                        "description": "Generate images using OpenAI's DALL-E 3",
+                        "icon": "🎨",
+                        "value": {"image_type": "ai", "image_provider": "dalle"}
+                    },
+                    {
+                        "id": "gemini_generated",
+                        "label": "✨ Gemini Image (Google)",
+                        "description": "Generate images using Google's Gemini image generation",
+                        "icon": "✨",
+                        "value": {"image_type": "ai", "image_provider": "gemini"}
                     },
                     {
                         "id": "stock_images",
@@ -346,4 +353,5 @@ class UserChoiceManager:
             "by_action": by_action,
             "recent_choices": choices[-10:]  # Last 10 choices
         }
+
 

@@ -649,6 +649,99 @@ def main():
         
         # Gamma and Canva removed - not working
         
+        # Quick Image Generation Test
+        st.markdown("---")
+        st.subheader("🧪 Quick Image Test")
+        st.caption("Test image generation without filling the full form")
+        
+        # Platform selection
+        test_platform = st.selectbox(
+            "Platform",
+            ["Instagram", "LinkedIn"],
+            key="test_platform"
+        )
+        
+        # Post type
+        test_post_type = st.selectbox(
+            "Post Type",
+            ["Product Launch", "Feature Announcement", "Company Update", "Educational", "Promotional", "Behind the Scenes"],
+            key="test_post_type"
+        )
+        
+        # What the post is about
+        test_post_description = st.text_area(
+            "What is this post about?",
+            placeholder="e.g., Our new AI-powered automation tool that helps small businesses save 40% of their time",
+            height=100,
+            key="test_post_description"
+        )
+        
+        # Image provider selection
+        test_image_provider = st.selectbox(
+            "Image Provider",
+            ["DALL-E 3 (OpenAI)", "Gemini Image (Google)"],
+            key="test_image_provider"
+        )
+        
+        # Generate button
+        if st.button("🎨 Generate Test Image", type="primary", use_container_width=True):
+            if not test_post_description or len(test_post_description.strip()) < 10:
+                st.error("Please provide a description (at least 10 characters)")
+            else:
+                marketing_agent, marketing_error = load_marketing_agent()
+                if marketing_error:
+                    st.error(f"Error: {marketing_error}")
+                else:
+                    with st.spinner("Generating image..."):
+                        # Prepare minimal context
+                        test_context = {
+                            'product_description': test_post_description,
+                            'platform': test_platform,
+                            'content_style': 'Professional',
+                            'campaign_goal': test_post_type,
+                            'generate_image': 'Yes, generate custom AI images',
+                            'image_provider': 'dalle' if 'DALL-E' in test_image_provider else 'gemini'
+                        }
+                        
+                        # Generate image
+                        try:
+                            image_result = marketing_agent.generate_marketing_image(
+                                product_description=test_post_description,
+                                style='Professional',
+                                image_style_description=f"{test_post_type} post for {test_platform}: {test_post_description}",
+                                for_presentation=False,
+                                image_provider='dalle' if 'DALL-E' in test_image_provider else 'gemini'
+                            )
+                            
+                            if image_result and image_result.get('success'):
+                                st.success("✅ Image generated successfully!")
+                                
+                                # Display image
+                                image_path = image_result.get('image_path')
+                                image_url = image_result.get('image_url')
+                                
+                                if image_path and Path(image_path).exists():
+                                    st.image(image_path, caption=f"Generated {test_platform} Image", use_container_width=True)
+                                    st.caption(f"📁 Saved to: {image_path}")
+                                elif image_url:
+                                    st.image(image_url, caption=f"Generated {test_platform} Image", use_container_width=True)
+                                    st.caption(f"🔗 Image URL: {image_url}")
+                                
+                                # Show prompt used
+                                if image_result.get('prompt_used'):
+                                    with st.expander("📝 View Prompt Used"):
+                                        st.code(image_result.get('prompt_used'), language=None)
+                            else:
+                                error_msg = image_result.get('error', 'Unknown error') if image_result else 'No response'
+                                st.error(f"❌ Image generation failed: {error_msg}")
+                                if image_result and image_result.get('message'):
+                                    st.info(image_result.get('message'))
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                            import traceback
+                            with st.expander("🔍 Error Details"):
+                                st.code(traceback.format_exc())
+        
         # Company ID input
         company_id = st.text_input("Company ID", value=st.session_state.company_id or "default")
         st.session_state.company_id = company_id
@@ -2206,12 +2299,44 @@ def main():
                     if marketing_error:
                         st.error(f"Error: {marketing_error}")
                     else:
+                        # Prepare context from answers first
+                        marketing_context = st.session_state.marketing_answers.copy()
+                        # Merge with company data if available
+                        if st.session_state.company_data:
+                            marketing_context.update(st.session_state.company_data)
+                        
+                        # Check if user wants to generate images and show choice selection
+                        generate_image = marketing_context.get('generate_image', '')
+                        if generate_image == "Yes, generate custom AI images":
+                            # Show image provider choice selection
+                            user_id = st.session_state.get('user_id', 'default')
+                            company_id = st.session_state.get('company_id', 'default')
+                            choice_manager = st.session_state.get('user_choice_manager')
+                            
+                            if choice_manager:
+                                image_choice = show_choice_selection(
+                                    choice_manager, 'marketing', 'generate_image', 
+                                    user_id, company_id
+                                )
+                                
+                                if not image_choice:
+                                    st.stop()  # Wait for user to select
+                                
+                                # Save the choice
+                                choice_manager.save_choice(
+                                    user_id=user_id,
+                                    company_id=company_id,
+                                    agent_name='marketing',
+                                    action='generate_image',
+                                    choice_id=image_choice['id'],
+                                    choice_data=image_choice
+                                )
+                                
+                                # Extract image provider from choice
+                                image_provider = image_choice.get('value', {}).get('image_provider', 'dalle')
+                                marketing_context['image_provider'] = image_provider
+                        
                         with st.spinner("Generating marketing content..."):
-                            # Prepare context from answers
-                            marketing_context = st.session_state.marketing_answers.copy()
-                            # Merge with company data if available
-                            if st.session_state.company_data:
-                                marketing_context.update(st.session_state.company_data)
                             
                             # Determine content type and generate
                             platform = marketing_context.get('platform', [])

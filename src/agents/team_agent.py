@@ -273,7 +273,8 @@ When generating responses:
             sources=all_sources
         )
     
-    def get_role_market_data(self, role_title: str, location: str, industry: str) -> Dict:
+    def get_role_market_data(self, role_title: str, location: str, industry: str, 
+                            company_context: Optional[Dict] = None) -> Dict:
         """
         Get market data for a specific role (salary, skillset trends).
         
@@ -281,14 +282,23 @@ When generating responses:
             role_title: Job title
             location: Work location (Remote/On-site/etc.)
             industry: Industry sector
+            company_context: Optional company information for personalized market data
             
         Returns:
             Market data including salary range and skillset trends
         """
         logger.info(f"Getting market data for role: {role_title}")
         
-        # Web search for salary and skillset data
-        salary_query = f"{role_title} salary {location} {industry} 2025"
+        # Enhance search queries with company context if available
+        company_stage = company_context.get('company_stage', '') if company_context else ''
+        company_size = company_context.get('current_team_size', '') if company_context else ''
+        
+        # Build more specific queries with company context
+        if company_stage:
+            salary_query = f"{role_title} salary {location} {industry} {company_stage} startup 2025"
+        else:
+            salary_query = f"{role_title} salary {location} {industry} 2025"
+        
         skills_query = f"{role_title} skills requirements {industry}"
         
         salary_search = self.mcp_client.web_search(query=salary_query, topic_context=role_title, max_results=5)
@@ -296,12 +306,23 @@ When generating responses:
         salary_results = salary_search.get("results", []) if salary_search.get("success") else []
         skills_results = skills_search.get("results", []) if skills_search.get("success") else []
         
+        # Build prompt with company context if available
+        company_info = ""
+        if company_context:
+            company_info = f"""
+COMPANY CONTEXT:
+- Company Stage: {company_context.get('company_stage', 'N/A')}
+- Team Size: {company_context.get('current_team_size', 'N/A')}
+- Industry: {company_context.get('industry', industry)}
+- Location: {company_context.get('headquarters', 'N/A')}
+"""
+        
         prompt = f"""Get market data for this job role:
 
 ROLE: {role_title}
 LOCATION: {location}
 INDUSTRY: {industry}
-
+{company_info}
 SALARY DATA:
 {self._format_web_results(salary_results) if salary_results else 'No salary data found'}
 
@@ -310,17 +331,19 @@ SKILLSET DATA:
 
 TASK: Extract and summarize:
 1. Salary Range (min-max, percentiles if available)
+   - Consider company stage: {company_stage if company_stage else 'General market'}
+   - Adjust for startup vs established company if applicable
 2. Key Skills Required (most common/important)
 3. Experience Level Expectations
 4. Market Demand (high/medium/low)
 5. Location Impact (if remote vs on-site affects salary)
 
-Be specific with numbers and data points."""
+Be specific with numbers and data points. If company context is provided, tailor the salary ranges accordingly (e.g., seed-stage startups typically offer lower base but higher equity)."""
         
-        system_prompt = "You are a compensation and hiring market research expert. Extract and summarize salary and skillset data from search results."
+        system_prompt = "You are a compensation and hiring market research expert. Extract and summarize salary and skillset data from search results, considering company context when provided."
         
-        # Extract company data for personalization
-        company_data = self._extract_company_data(company_context)
+        # Extract company data for personalization if available
+        company_data = self._extract_company_data(company_context) if company_context else None
         response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
         all_sources = []
@@ -354,11 +377,12 @@ Be specific with numbers and data points."""
         """
         logger.info(f"Generating job description for: {role_title}")
         
-        # Get market data for the role
+        # Get market data for the role (with company context for personalized data)
         market_data = self.get_role_market_data(
             role_title,
             team_context.get('work_location', 'Remote'),
-            company_context.get('industry', '')
+            company_context.get('industry', ''),
+            company_context=company_context
         )
         
         # Retrieve JD examples
