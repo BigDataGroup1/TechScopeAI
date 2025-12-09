@@ -157,6 +157,7 @@ def load_pitch_agent():
 
 
 @st.cache_resource
+@st.cache_resource(ttl=3600)  # Cache for 1 hour, but will update on code changes
 def load_competitive_agent():
     """Load and cache CompetitiveAgent."""
     try:
@@ -176,8 +177,8 @@ def load_competitive_agent():
             embedder=embedder
         )
         
-        # Initialize agent
-        agent = CompetitiveAgent(retriever)
+        # Initialize agent with "auto" mode for automatic Gemini fallback on quota errors
+        agent = CompetitiveAgent(retriever, model="gpt-4-turbo-preview", ai_provider="auto")
         return agent, None
     except Exception as e:
         return None, str(e)
@@ -1953,17 +1954,53 @@ def main():
     col_comp = st.columns(1)[0]
     with col_comp:
         if st.button("🔍 Competitive Analysis"):
-            if "competitive_questionnaire_active" not in st.session_state:
-                st.session_state.competitive_questionnaire_active = False
-            if "competitive_answers" not in st.session_state:
-                st.session_state.competitive_answers = {}
-            if "competitive_question_index" not in st.session_state:
-                st.session_state.competitive_question_index = 0
-            
-            st.session_state.competitive_questionnaire_active = True
-            st.session_state.competitive_question_index = 0
-            st.session_state.competitive_answers = {}
-            st.rerun()
+            if st.session_state.company_data:
+                competitive_agent, competitive_error = load_competitive_agent()
+                if competitive_error:
+                    st.error(f"Error: {competitive_error}")
+                else:
+                    with st.spinner("Analyzing competitors using your company data..."):
+                        try:
+                            # Use existing company_data directly - no questionnaire needed
+                            competitive_context = st.session_state.company_data.copy()
+                            
+                            # Perform competitive analysis
+                            response = competitive_agent.analyze_competitors(
+                                company_details=competitive_context,
+                                competitors=None
+                            )
+                            
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response['response'],
+                                "sources": response.get('sources', [])
+                            })
+                            st.rerun()
+                        except Exception as e:
+                            error_str = str(e)
+                            # Check if it's a quota error
+                            is_quota_error = ("429" in error_str or "quota" in error_str.lower() or 
+                                            "insufficient_quota" in error_str.lower() or 
+                                            "RateLimitError" in str(type(e).__name__))
+                            
+                            if is_quota_error:
+                                st.error("""
+                                **⚠️ OpenAI Quota Exceeded**
+                                
+                                Your OpenAI API quota has been exceeded. Options:
+                                1. **Wait a few minutes** and try again (if it's rate limiting)
+                                2. **Check your OpenAI billing** at https://platform.openai.com/account/billing
+                                3. **Add credits** to your OpenAI account
+                                4. **Use Gemini instead** - Set `ai_provider` to "Gemini" in settings
+                                
+                                The system will automatically try to fallback to Gemini if available in "Auto" mode.
+                                """)
+                                logger.error(f"OpenAI quota error in Competitive Analysis: {e}")
+                            else:
+                                st.error(f"**Error analyzing competitors:** {error_str}")
+                                logger.error(f"Error in Competitive Analysis: {e}", exc_info=True)
+            else:
+                st.warning("Please enter company details first!")
     
     # Team, Marketing, Policy & Patent Agent buttons
     col_team, col_mkt, col_pol, col_pat = st.columns(4)
@@ -2368,163 +2405,6 @@ def main():
                     st.session_state.policy_questionnaire_active = False
                     st.session_state.policy_answers = {}
                     st.session_state.policy_question_index = 0
-                    st.rerun()
-    
-    # Competitive Analysis Questionnaire Flow
-    if "competitive_questionnaire_active" not in st.session_state:
-        st.session_state.competitive_questionnaire_active = False
-    if "competitive_answers" not in st.session_state:
-        st.session_state.competitive_answers = {}
-    if "competitive_question_index" not in st.session_state:
-        st.session_state.competitive_question_index = 0
-    
-    if st.session_state.competitive_questionnaire_active:
-        st.markdown("---")
-        st.subheader("🔍 Competitive Analysis Questionnaire")
-        
-        from src.agents.competitive_agent import CompetitiveAgent
-        questionnaire = CompetitiveAgent.COMPETITIVE_QUESTIONNAIRE
-        
-        # Filter questions based on dependencies
-        visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.competitive_answers)]
-        
-        if st.session_state.competitive_question_index < len(visible_questions):
-            current_question = visible_questions[st.session_state.competitive_question_index]
-            
-            st.progress((st.session_state.competitive_question_index + 1) / len(visible_questions))
-            st.caption(f"Question {st.session_state.competitive_question_index + 1} of {len(visible_questions)}")
-            
-            st.markdown(f"### {current_question['question']}")
-            
-            answer_key = f"competitive_q_{current_question['id']}"
-            answer = None
-            
-            # Render input based on type
-            if current_question['type'] == 'textarea':
-                answer = st.text_area(
-                    "Your answer:",
-                    value=st.session_state.competitive_answers.get(current_question['id'], ''),
-                    height=150,
-                    key=answer_key,
-                    placeholder=current_question.get('placeholder', '')
-                )
-            elif current_question['type'] == 'text':
-                answer = st.text_input(
-                    "Your answer:",
-                    value=st.session_state.competitive_answers.get(current_question['id'], ''),
-                    key=answer_key,
-                    placeholder=current_question.get('placeholder', '')
-                )
-            elif current_question['type'] == 'select':
-                current_value = st.session_state.competitive_answers.get(current_question['id'])
-                default_index = 0
-                if current_value and current_value in current_question['options']:
-                    default_index = current_question['options'].index(current_value)
-                
-                answer = st.selectbox(
-                    "Select an option:",
-                    options=current_question['options'],
-                    index=default_index,
-                    key=answer_key
-                )
-            elif current_question['type'] == 'multiselect':
-                answer = st.multiselect(
-                    "Select all that apply:",
-                    options=current_question['options'],
-                    default=st.session_state.competitive_answers.get(current_question['id'], []),
-                    key=answer_key
-                )
-            
-            # Store answer
-            if answer:
-                if current_question['type'] == 'multiselect':
-                    st.session_state.competitive_answers[current_question['id']] = answer
-                else:
-                    st.session_state.competitive_answers[current_question['id']] = answer
-            
-            # Navigation buttons
-            col_prev, col_next, col_cancel = st.columns([1, 3, 1])
-            
-            with col_prev:
-                if st.button("◀ Previous", disabled=st.session_state.competitive_question_index == 0, key=f"competitive_prev_{answer_key}"):
-                    st.session_state.competitive_question_index -= 1
-                    st.rerun()
-            
-            with col_next:
-                is_disabled = False
-                if current_question.get('required'):
-                    if current_question['type'] == 'multiselect':
-                        is_disabled = not answer or len(answer) == 0
-                    else:
-                        is_disabled = not answer or (isinstance(answer, str) and len(answer.strip()) == 0)
-                
-                if st.button("Next ▶", disabled=is_disabled, key=f"competitive_next_{answer_key}"):
-                    if is_disabled:
-                        st.warning("Please answer this question to continue.")
-                    else:
-                        st.session_state.competitive_question_index += 1
-                        st.rerun()
-            
-            with col_cancel:
-                if st.button("❌ Cancel", key=f"competitive_cancel_{answer_key}"):
-                    st.session_state.competitive_questionnaire_active = False
-                    st.session_state.competitive_answers = {}
-                    st.session_state.competitive_question_index = 0
-                    st.rerun()
-        
-        else:
-            # All questions answered - generate competitive analysis
-            st.success("✅ All questions answered!")
-            
-            st.subheader("📋 Your Answers Summary")
-            for q in visible_questions:
-                if q['id'] in st.session_state.competitive_answers:
-                    st.markdown(f"**{q['question']}**")
-                    answer = st.session_state.competitive_answers[q['id']]
-                    if isinstance(answer, list):
-                        st.markdown(f"  → {', '.join(answer)}")
-                    else:
-                        st.markdown(f"  → {answer}")
-                    st.markdown("---")
-            
-            col_analyze, col_restart = st.columns([3, 1])
-            
-            with col_analyze:
-                if st.button("🔍 Analyze Competitors", type="primary"):
-                    competitive_agent, competitive_error = load_competitive_agent()
-                    if competitive_error:
-                        st.error(f"Error: {competitive_error}")
-                    else:
-                        with st.spinner("Analyzing competitors and generating comprehensive competitive analysis..."):
-                            # Prepare context from answers
-                            competitive_context = st.session_state.competitive_answers.copy()
-                            # Merge with company data if available
-                            if st.session_state.company_data:
-                                competitive_context.update(st.session_state.company_data)
-                            
-                            # Perform competitive analysis with correct method signature
-                            response = competitive_agent.analyze_competitors(
-                                company_details=competitive_context,
-                                competitors=None
-                            )
-                            
-                            st.session_state.messages.append({
-                                "role": "assistant",
-                                "content": response['response'],
-                                "sources": response.get('sources', [])
-                            })
-                            
-                            # Reset questionnaire
-                            st.session_state.competitive_questionnaire_active = False
-                            st.session_state.competitive_answers = {}
-                            st.session_state.competitive_question_index = 0
-                            st.rerun()
-            
-            with col_restart:
-                if st.button("🔄 Restart"):
-                    st.session_state.competitive_questionnaire_active = False
-                    st.session_state.competitive_answers = {}
-                    st.session_state.competitive_question_index = 0
                     st.rerun()
     
     # Team & Hiring Questionnaire Flow

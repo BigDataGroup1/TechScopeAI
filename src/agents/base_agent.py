@@ -338,11 +338,16 @@ class BaseAgent(ABC):
             return response.choices[0].message.content
         except Exception as e:
             error_str = str(e)
+            error_type = type(e).__name__
             # Check if it's a quota/rate limit error and we're in auto mode
             # Use original_ai_provider to check, since ai_provider may have been changed to "openai" during init
-            is_quota_error = ("429" in error_str or "quota" in error_str.lower() or "rate limit" in error_str.lower() or "insufficient_quota" in error_str.lower())
+            is_quota_error = ("429" in error_str or "quota" in error_str.lower() or 
+                            "rate limit" in error_str.lower() or "insufficient_quota" in error_str.lower() or
+                            "RateLimitError" in error_type)
             
-            if (self.original_ai_provider == "auto" or self.ai_provider == "auto") and is_quota_error:
+            # Always try fallback for quota errors if in auto mode, or if no specific provider was set
+            if (self.original_ai_provider == "auto" or self.ai_provider == "auto" or 
+                not hasattr(self, 'original_ai_provider')) and is_quota_error:
                 logger.warning(f"OpenAI quota exceeded or rate limited: {e}")
                 logger.info("Attempting to fallback to Gemini...")
                 
