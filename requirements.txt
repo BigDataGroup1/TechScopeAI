@@ -32,6 +32,7 @@ tqdm>=4.65.0  # Progress bars
 
 # LLM APIs
 openai>=1.0.0  # OpenAI API
+google-generativeai>=0.3.0  # Google Gemini API
 
 # Data Processing
 numpy>=1.24.0,<2.0  # Pin to NumPy 1.x for compatibility with PyTorch/sentence-transformers
@@ -50,4 +51,5 @@ ddgs>=0.1.0  # Web search (free, no API key needed) - renamed from duckduckgo-se
 reportlab>=4.0.0  # PDF export
 python-pptx>=0.6.21  # PowerPoint export
 Pillow>=10.0.0  # Image processing for PowerPoint
+matplotlib>=3.7.0  # Charts and graphs for financial data
 

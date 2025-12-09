@@ -16,6 +16,12 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 # Try to import PersonalizationAgent (Weaviate Agents - separate from RAG)
 # Note: RAG uses PostgreSQL, but agents use Weaviate for personalization
 try:
@@ -46,7 +52,8 @@ class BaseAgent(ABC):
     """Base class for all TechScopeAI agents."""
     
     def __init__(self, category: str, retriever: Retriever, 
-                 model: str = "gpt-4-turbo-preview", temperature: float = 0.7):
+                 model: str = "gpt-4-turbo-preview", temperature: float = 0.7,
+                 ai_provider: str = "openai"):
         """
         Initialize base agent.
         
@@ -55,21 +62,53 @@ class BaseAgent(ABC):
             retriever: Retriever instance for RAG
             model: LLM model name
             temperature: LLM temperature
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
         self.category = category
         self.retriever = retriever
         self.model = model
         self.temperature = temperature
+        self.ai_provider = ai_provider.lower()
         
-        # Initialize LLM client
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment. Add it to .env file")
+        # Initialize LLM client based on provider
+        if self.ai_provider in ["gemini", "auto"]:
+            # Try Gemini first
+            gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            if gemini_key and GEMINI_AVAILABLE:
+                try:
+                    genai.configure(api_key=gemini_key)
+                    # Use appropriate Gemini model
+                    if "gemini" in model.lower():
+                        self.gemini_model = genai.GenerativeModel(model)
+                    else:
+                        # Default Gemini model
+                        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                    self.client = None  # Use Gemini instead of OpenAI
+                    self.use_gemini = True
+                    logger.info(f"✅ Using Gemini for {category} agent")
+                except Exception as e:
+                    logger.warning(f"Could not initialize Gemini: {e}, falling back to OpenAI")
+                    self.use_gemini = False
+                    self.ai_provider = "openai"
+            else:
+                if self.ai_provider == "gemini":
+                    raise ValueError("GEMINI_API_KEY not found and Gemini was explicitly selected. Add it to .env file")
+                logger.warning("GEMINI_API_KEY not found, falling back to OpenAI")
+                self.use_gemini = False
+                self.ai_provider = "openai"
         
-        if not OPENAI_AVAILABLE:
-            raise ImportError("openai package required. Install with: pip install openai")
-        
-        self.client = OpenAI(api_key=api_key)
+        if not self.use_gemini:
+            # Use OpenAI
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment. Add it to .env file")
+            
+            if not OPENAI_AVAILABLE:
+                raise ImportError("openai package required. Install with: pip install openai")
+            
+            self.client = OpenAI(api_key=api_key)
+            self.use_gemini = False
+            logger.info(f"✅ Using OpenAI for {category} agent")
         
         # Initialize MCP client for tools (web search, image search, etc.)
         self.mcp_client = MCPClient()
@@ -214,6 +253,7 @@ class BaseAgent(ABC):
                          company_data: Optional[Dict] = None) -> str:
         """
         Generate response using LLM with automatic personalization.
+        Supports both OpenAI and Gemini.
         
         Args:
             prompt: User prompt
@@ -223,6 +263,45 @@ class BaseAgent(ABC):
         Returns:
             LLM response text (personalized to the startup)
         """
+        # Personalize the prompt with company data
+        personalized_prompt = self.personalize_prompt(prompt, company_data)
+        
+        # Use Gemini if configured
+        if self.use_gemini and hasattr(self, 'gemini_model'):
+            try:
+                # Enhance system prompt with personalization instructions
+                enhanced_system_prompt = system_prompt or ""
+                if company_data:
+                    company_name = company_data.get('company_name', 'this startup')
+                    enhanced_system_prompt += f"\n\nIMPORTANT: All responses must be personalized specifically for {company_name}. Use the company's specific details, industry, problem, solution, and context provided. Make responses relevant and tailored to this startup's unique situation."
+                
+                # Combine system prompt and user prompt for Gemini
+                full_prompt = f"{enhanced_system_prompt}\n\n{personalized_prompt}" if enhanced_system_prompt else personalized_prompt
+                
+                response = self.gemini_model.generate_content(
+                    full_prompt,
+                    generation_config={
+                        "temperature": self.temperature,
+                    }
+                )
+                return response.text
+            except Exception as e:
+                logger.error(f"Error generating response with Gemini: {e}")
+                # Fallback to OpenAI if Gemini fails and auto mode
+                if self.ai_provider == "auto":
+                    logger.info("Falling back to OpenAI...")
+                    self.use_gemini = False
+                    # Initialize OpenAI client if not already done
+                    if not hasattr(self, 'client') or self.client is None:
+                        api_key = os.getenv("OPENAI_API_KEY")
+                        if api_key and OPENAI_AVAILABLE:
+                            self.client = OpenAI(api_key=api_key)
+                        else:
+                            raise ValueError("Cannot fallback to OpenAI: API key not found")
+                else:
+                    raise
+        
+        # Use OpenAI
         messages = []
         
         # Enhance system prompt with personalization instructions
@@ -234,8 +313,6 @@ class BaseAgent(ABC):
         if enhanced_system_prompt:
             messages.append({"role": "system", "content": enhanced_system_prompt})
         
-        # Personalize the prompt with company data
-        personalized_prompt = self.personalize_prompt(prompt, company_data)
         messages.append({"role": "user", "content": personalized_prompt})
         
         try:

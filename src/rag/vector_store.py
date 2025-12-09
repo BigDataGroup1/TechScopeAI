@@ -50,23 +50,43 @@ class VectorStore:
         
         # Initialize connection pool
         try:
+            # Test connection first with a simple connection
+            test_conn = psycopg2.connect(self.database_url, connect_timeout=5)
+            test_conn.close()
+            
+            # If test succeeds, create pool
             self.pool = ThreadedConnectionPool(1, pool_size, dsn=self.database_url)
-            logger.info(f"PostgreSQL connected: {self.database_url.split('@')[-1] if '@' in self.database_url else 'local'}")
+            logger.info(f"✅ PostgreSQL connected: {self.database_url.split('@')[-1] if '@' in self.database_url else 'local'}")
             
             # Ensure pgvector extension is enabled
             self._ensure_pgvector_extension()
             
+        except psycopg2.OperationalError as e:
+            error_msg = str(e)
+            logger.warning(f"⚠️  Failed to connect to PostgreSQL: {error_msg}")
+            if "Connection refused" in error_msg:
+                logger.warning("💡 Cloud SQL Proxy might not be running. Start it with: ./start_proxy_simple.sh")
+            elif "server closed the connection" in error_msg:
+                logger.warning("💡 Cloud SQL Proxy might have crashed. Check proxy terminal and restart it.")
+            logger.warning("VectorStore will work in limited mode. Some features may not be available.")
+            # Don't raise - allow graceful degradation
+            self.pool = None
         except Exception as e:
-            logger.error(f"Failed to connect to PostgreSQL: {e}")
-            logger.error("Make sure PostgreSQL is running and pgvector extension is installed.")
-            raise
+            logger.warning(f"⚠️  Failed to connect to PostgreSQL: {e}")
+            logger.warning("VectorStore will work in limited mode. Some features may not be available.")
+            # Don't raise - allow graceful degradation
+            self.pool = None
     
     def _get_connection(self):
         """Get a connection from the pool."""
+        if self.pool is None:
+            raise ConnectionError("PostgreSQL connection pool not initialized. Database may not be available.")
         return self.pool.getconn()
     
     def _put_connection(self, conn):
         """Return a connection to the pool."""
+        if self.pool is None:
+            return
         self.pool.putconn(conn)
     
     def _ensure_pgvector_extension(self):
@@ -274,14 +294,31 @@ class VectorStore:
         try:
             # Get query vector
             if query_embeddings is not None:
-                query_vector = query_embeddings[0]  # Use first embedding
+                query_vector = query_embeddings[0] if isinstance(query_embeddings, list) else query_embeddings
+                # Ensure it's a flat list of floats
+                if isinstance(query_vector, list) and len(query_vector) > 0:
+                    # Check if it's nested (list of lists)
+                    if isinstance(query_vector[0], list):
+                        query_vector = query_vector[0]  # Unwrap nested list
+                    # Ensure all elements are floats
+                    query_vector = [float(x) for x in query_vector]
+                elif isinstance(query_vector, np.ndarray):
+                    query_vector = query_vector.flatten().tolist()
             elif query_texts is not None and self.embedding_model is not None:
                 # Generate embedding for query
                 query_embedding = self.embedding_model.encode(query_texts[0])
                 if isinstance(query_embedding, np.ndarray):
-                    query_vector = query_embedding.tolist()
+                    query_vector = query_embedding.flatten().tolist()
+                elif isinstance(query_embedding, list):
+                    # Ensure it's a flat list
+                    if len(query_embedding) > 0 and isinstance(query_embedding[0], list):
+                        query_vector = query_embedding[0]
+                    else:
+                        query_vector = query_embedding
+                    # Ensure all elements are floats
+                    query_vector = [float(x) for x in query_vector]
                 else:
-                    query_vector = query_embedding
+                    query_vector = [float(query_embedding)]
             else:
                 raise ValueError("Either query_texts (with embedding_model) or query_embeddings must be provided")
             
@@ -319,6 +356,16 @@ class VectorStore:
                 with conn.cursor() as cur:
                     # Use cosine distance (1 - cosine similarity)
                     # ORDER BY embedding <=> %s uses cosine distance operator
+                    # Format vector properly for pgvector: convert list to string format '[0.1,0.2,0.3]'
+                    if isinstance(query_vector, list):
+                        # Convert list to pgvector format: '[0.1,0.2,0.3]' (no spaces, no nested brackets)
+                        vector_str = '[' + ','.join(str(float(x)) for x in query_vector) + ']'
+                    elif isinstance(query_vector, np.ndarray):
+                        vector_str = '[' + ','.join(str(float(x)) for x in query_vector.flatten()) + ']'
+                    else:
+                        # If already a string, try to parse and reformat
+                        vector_str = str(query_vector).replace(' ', '').replace('[[', '[').replace(']]', ']')
+                    
                     query = f"""
                         SELECT 
                             chunk_id,
@@ -331,7 +378,7 @@ class VectorStore:
                         LIMIT %s
                     """
                     
-                    params = [str(query_vector), str(query_vector), n_results] + where_params
+                    params = [vector_str, vector_str, n_results] + where_params
                     cur.execute(query, params)
                     
                     results_data = cur.fetchall()

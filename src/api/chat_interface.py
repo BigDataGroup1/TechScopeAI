@@ -1,6 +1,7 @@
 """Chat interface for TechScopeAI using Streamlit."""
 
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import logging
 import os
@@ -145,8 +146,8 @@ def load_pitch_agent():
             embedder=embedder
         )
         
-        # Initialize agent
-        agent = PitchAgent(retriever)
+        # Initialize agent (will use provider from company_data when generating)
+        agent = PitchAgent(retriever, ai_provider="auto")  # Default to auto, will use provider from company_data
         return agent, None
     except Exception as e:
         return None, str(e)
@@ -469,6 +470,8 @@ def main():
         )
         st.session_state.use_supervisor = use_supervisor_setting
         
+        # Gamma and Canva removed - not working
+        
         # Company ID input
         company_id = st.text_input("Company ID", value=st.session_state.company_id or "default")
         st.session_state.company_id = company_id
@@ -710,6 +713,9 @@ def main():
                                     st.rerun()  # Exit here if supervisor succeeded
                             except Exception as e:
                                 logger.error(f"Supervisor execution error: {e}", exc_info=True)
+                                # Display error to user
+                                error_msg = f"⚠️ Supervisor agent encountered an error. Falling back to direct routing...\n\nError: {str(e)}"
+                                st.warning(error_msg)
                                 use_supervisor = False
                     
                     # Fallback to direct routing if supervisor didn't succeed
@@ -912,7 +918,14 @@ def main():
                                 })
                         else:
                             # Regular text response
-                            st.markdown(response.get('response', 'No response generated'))
+                            response_text = response.get('response', 'No response generated')
+                            
+                            # Always display response, even if empty
+                            if response_text and response_text.strip():
+                                st.markdown(response_text)
+                            else:
+                                st.warning("⚠️ No response generated. Please try rephrasing your question.")
+                                response_text = "I couldn't generate a response. Please try asking your question differently or provide more context."
                             
                             # Check if Instagram content has generated image
                             if response.get('image_generated'):
@@ -987,10 +1000,10 @@ def main():
                                             source_type = "Web Search" if is_web_search else "Cloud SQL Collection"
                                             st.caption(f"   {source_type}")
                             
-                            # Add to messages
+                            # Always add to messages, even if response was empty
                             message_content = {
                                 "role": "assistant",
-                                "content": response.get('response', ''),
+                                "content": response_text,  # Use the processed response_text
                                 "sources": response.get('sources', [])
                             }
                             
@@ -1001,14 +1014,17 @@ def main():
                                 message_content['image_url'] = response.get('image_url')
                             
                             st.session_state.messages.append(message_content)
+                            st.rerun()
                     
                 except Exception as e:
                     error_msg = f"❌ Error: {str(e)}"
                     st.error(error_msg)
+                    logger.error(f"Chat error: {e}", exc_info=True)
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": error_msg
                     })
+                    st.rerun()
     
     # Slides Preview Section
     if st.session_state.slides and len(st.session_state.slides.get('slides', [])) > 0:
@@ -1017,6 +1033,132 @@ def main():
         
         slides_list = st.session_state.slides['slides']
         total_slides = len(slides_list)
+        
+        # ============================================
+        # 🎯 PRIMARY OUTPUT: POWERPOINT PRESENTATION
+        # ============================================
+        pptx_path = st.session_state.slides.get('pptx_path')
+        
+        # Fallback: If no path in session, try to find the most recent PowerPoint file
+        if not pptx_path or not Path(pptx_path).exists():
+            try:
+                exports_dir = Path("exports")
+                if exports_dir.exists():
+                    pptx_files = sorted(exports_dir.glob("*.pptx"), key=lambda p: p.stat().st_mtime, reverse=True)
+                    if pptx_files:
+                        # Use most recent PowerPoint file
+                        pptx_path = str(pptx_files[0])
+                        st.session_state.slides['pptx_path'] = pptx_path
+            except Exception:
+                pass  # Silently fail
+        
+        # Always try to generate PowerPoint if slides exist but no PPTX
+        if not pptx_path and slides_list:
+            with st.spinner("🔄 Generating PowerPoint presentation..."):
+                try:
+                    from src.utils.exporters import PitchExporter
+                    exporter = PitchExporter()
+                    # Get AI enhancement preference and company data
+                    enhance_with_ai = st.session_state.get('enhance_with_ai', True)
+                    ai_provider = st.session_state.get('ai_provider', 'auto')  # 🆕 Get AI provider
+                    company_data = st.session_state.get('company_data', {})
+                    pptx_path = exporter.export_to_powerpoint(
+                        slides_list,
+                        st.session_state.slides.get('company_name', 'Company'),
+                        include_images=True,
+                        enhance_with_ai=enhance_with_ai,
+                        company_data=company_data,  # 🆕 Pass company data
+                        full_rewrite=True,  # 🆕 Enable full AI rewrite
+                        ai_provider=ai_provider  # 🆕 Pass AI provider
+                    )
+                    if pptx_path:
+                        st.session_state.slides['pptx_path'] = pptx_path
+                        st.success("✅ PowerPoint generated!")
+                except Exception as e:
+                    st.warning(f"⚠️ Could not auto-generate PowerPoint: {e}")
+                    logger.error(f"PowerPoint generation error: {e}", exc_info=True)
+        
+        if pptx_path and Path(pptx_path).exists():
+            st.markdown("---")
+            st.markdown("## 📊 **YOUR POWERPOINT PRESENTATION**")
+            st.markdown("### ✨ AI-Enhanced Professional Pitch Deck")
+            
+            # Main PowerPoint section
+            col_ppt_main1, col_ppt_main2 = st.columns([3, 1])
+            with col_ppt_main1:
+                st.success(f"✅ **PowerPoint Ready!**")
+                st.markdown(f"""
+                - **📁 File:** `{Path(pptx_path).name}`
+                - **📊 Slides:** {total_slides} professional slides
+                - **🎨 Style:** AI-enhanced with modern design
+                - **🖼️ Images:** Included (if available)
+                """)
+                
+                # File size
+                file_size = Path(pptx_path).stat().st_size / 1024  # KB
+                st.caption(f"📦 File size: {file_size:.1f} KB")
+            
+            with col_ppt_main2:
+                with open(pptx_path, 'rb') as f:
+                    st.download_button(
+                        "⬇️ **DOWNLOAD PPTX**",
+                        f.read(),
+                        file_name=Path(pptx_path).name,
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        help="Download your complete PowerPoint presentation",
+                        use_container_width=True,
+                        type="primary"
+                    )
+            
+            # Preview PowerPoint slides as images
+            st.markdown("---")
+            st.markdown("### 👁️ **Preview Your Slides**")
+            st.info("💡 **This is your main presentation!** Download the PPTX file above to open in PowerPoint, Google Slides, or any presentation software.")
+            
+            # Try to show slide previews
+            try:
+                # Convert PPTX to images for preview (if possible)
+                from pptx import Presentation
+                from PIL import Image
+                import io
+                
+                prs = Presentation(pptx_path)
+                num_slides = len(prs.slides)
+                
+                st.markdown(f"**📑 Your presentation has {num_slides} slides:**")
+                
+                # Show slide thumbnails/info
+                preview_cols = st.columns(min(3, num_slides))
+                for i, slide in enumerate(prs.slides[:min(6, num_slides)]):  # Show first 6 slides
+                    col_idx = i % 3
+                    with preview_cols[col_idx]:
+                        # Get slide title or number
+                        slide_title = f"Slide {i+1}"
+                        for shape in slide.shapes:
+                            if hasattr(shape, "text") and shape.text.strip():
+                                slide_title = shape.text.strip()[:30] + ("..." if len(shape.text) > 30 else "")
+                                break
+                        
+                        with st.container():
+                            st.markdown(f"""
+                            <div style="border: 2px solid #3b82f6; border-radius: 8px; padding: 15px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); margin-bottom: 10px;">
+                                <h4 style="margin: 0; color: #1e40af;">📄 {slide_title}</h4>
+                                <p style="margin: 5px 0; color: #64748b; font-size: 0.9em;">Slide {i+1} of {num_slides}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                if num_slides > 6:
+                    st.caption(f"... and {num_slides - 6} more slides. Download the PPTX file to see all slides!")
+                    
+            except Exception as e:
+                # If preview fails, just show info
+                st.markdown(f"**✅ Your PowerPoint contains {total_slides} professional slides**")
+                st.caption("💡 Download the PPTX file above to view all slides in PowerPoint or Google Slides")
+                logger.debug(f"Could not create slide preview: {e}")
+            
+            st.markdown("---")
+        
+        # Gamma and Canva removed - not working
         
         # Slide navigation
         col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 2, 1, 2])
@@ -1032,8 +1174,9 @@ def main():
                 st.rerun()
         with col_nav4:
             # Export buttons
+            from src.utils.exporters import PitchExporter
             exporter = PitchExporter()
-            col_exp1, col_exp2, col_exp3 = st.columns(3)
+            col_exp1, col_exp2, col_exp3, col_exp4, col_exp5 = st.columns(5)
             with col_exp1:
                 if st.button("📄 Export PDF"):
                     filepath = exporter.export_to_pdf(slides_list, st.session_state.slides.get('company_name', 'Company'))
@@ -1041,21 +1184,44 @@ def main():
                         with open(filepath, 'rb') as f:
                             st.download_button("⬇ Download PDF", f, file_name=Path(filepath).name, mime="application/pdf")
             with col_exp2:
-                if st.button("📊 Export PPTX (with images)"):
-                    filepath = exporter.export_to_powerpoint(
-                        slides_list, 
-                        st.session_state.slides.get('company_name', 'Company'),
-                        include_images=True
-                    )
-                    if filepath:
-                        with open(filepath, 'rb') as f:
-                            st.download_button("⬇ Download PPTX", f, file_name=Path(filepath).name, mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+                if st.button("📊 Export PPTX", help="Generate and download PowerPoint presentation"):
+                    with st.spinner("Creating PowerPoint..."):
+                        # Get AI enhancement preference (default: True)
+                        enhance_with_ai = st.session_state.get('enhance_with_ai', True)
+                        ai_provider = st.session_state.get('ai_provider', 'auto')  # 🆕 Get AI provider
+                        # Get company data for financial charts and intelligent filtering
+                        company_data = st.session_state.get('company_data', {})
+                        filepath = exporter.export_to_powerpoint(
+                            slides_list, 
+                            st.session_state.slides.get('company_name', 'Company'),
+                            include_images=True,
+                            enhance_with_ai=enhance_with_ai,
+                            company_data=company_data,  # 🆕 Pass company data
+                            full_rewrite=True,  # 🆕 Enable full AI rewrite
+                            ai_provider=ai_provider  # 🆕 Pass AI provider
+                        )
+                        if filepath:
+                            # Update session state with new path
+                            st.session_state.slides['pptx_path'] = filepath
+                            with open(filepath, 'rb') as f:
+                                st.download_button(
+                                    "⬇ Download PPTX", 
+                                    f.read(), 
+                                    file_name=Path(filepath).name, 
+                                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                    help="Download the PowerPoint file"
+                                )
+                            st.success(f"✅ PowerPoint created: {Path(filepath).name}")
+                        else:
+                            st.error("❌ Failed to create PowerPoint. Check terminal for errors.")
+                            st.info("💡 Make sure python-pptx is installed: `pip install python-pptx`")
             with col_exp3:
                 if st.button("📝 Export MD"):
                     filepath = exporter.export_to_markdown(slides_list, st.session_state.slides.get('company_name', 'Company'))
                     if filepath:
                         with open(filepath, 'rb') as f:
                             st.download_button("⬇ Download MD", f, file_name=Path(filepath).name, mime="text/markdown")
+            # Gamma and Canva removed
         
         # Display current slide
         if 0 <= st.session_state.current_slide < total_slides:
@@ -1166,29 +1332,224 @@ def main():
                 st.warning("Please enter company details first!")
     
     with col2:
+        # Quick test button for Gamma/Canva
+        if st.button("🧪 Quick Test (3 slides)", help="Test Gamma.ai and Canva with minimal slides"):
+            with st.spinner("Creating test presentation with 3 slides..."):
+                # Create minimal test slides
+                test_slides_data = {
+                    "slides": [
+                        {
+                            "slide_number": 1,
+                            "title": "Test Company",
+                            "content": "This is a quick test to verify Gamma.ai and Canva integrations work correctly.",
+                            "key_points": ["Test integration", "Verify functionality"]
+                        },
+                        {
+                            "slide_number": 2,
+                            "title": "Problem",
+                            "content": "Testing the integration system.",
+                            "key_points": ["Quick test", "Minimal slides"]
+                        },
+                        {
+                            "slide_number": 3,
+                            "title": "Solution",
+                            "content": "Integration test successful!",
+                            "key_points": ["Working", "Ready"]
+                        }
+                    ],
+                    "total_slides": 3,
+                    "company_name": "Test Company"
+                }
+                
+                # Gamma and Canva removed
+                
+                # Generate PowerPoint for test slides too
+                try:
+                    from src.utils.exporters import PitchExporter
+                    exporter = PitchExporter()
+                    pptx_path = exporter.export_to_powerpoint(
+                        test_slides_data["slides"],
+                        "Test Company",
+                        include_images=False  # Skip images for quick test
+                    )
+                    if pptx_path:
+                        test_slides_data["pptx_path"] = pptx_path
+                        st.success("✅ PowerPoint also generated for test slides!")
+                except Exception as e:
+                    st.warning(f"⚠️ PowerPoint generation failed: {e}")
+                
+                # Store test results
+                st.session_state.slides = test_slides_data
+                st.session_state.current_slide = 0
+                st.rerun()
+        
+        # AI Enhancement Toggle
+        col_ai1, col_ai2 = st.columns([2, 1])
+        with col_ai1:
+            enhance_with_ai = st.checkbox(
+                "🤖 Enhance with AI (improves slide content quality)", 
+                value=True,
+                help="Uses AI to enhance slide titles, content, and key points for better investor appeal"
+            )
+        with col_ai2:
+            # AI Provider Selection (Gemini or OpenAI)
+            ai_provider = st.selectbox(
+                "AI Provider",
+                options=["Auto (Gemini → OpenAI)", "Gemini", "OpenAI"],
+                index=0,
+                help="Choose AI provider. Auto tries Gemini first, then OpenAI"
+            )
+        
+        # Store in session state so it persists across reruns
+        st.session_state['enhance_with_ai'] = enhance_with_ai
+        st.session_state['ai_provider'] = ai_provider
+        
+        # 🆕 QUESTIONNAIRE FOR MISSING IMPORTANT DATA
+        if st.session_state.company_data:
+            missing_data = []
+            company_data = st.session_state.company_data
+            
+            # Check for critical missing data
+            if not company_data.get('company_name'):
+                missing_data.append(('company_name', 'Company Name', 'text'))
+            if not company_data.get('problem'):
+                missing_data.append(('problem', 'Problem Statement', 'textarea'))
+            if not company_data.get('solution'):
+                missing_data.append(('solution', 'Solution Description', 'textarea'))
+            if not company_data.get('target_market'):
+                missing_data.append(('target_market', 'Target Market', 'text'))
+            
+            # Check for important financial data if company is operating
+            company_stage = company_data.get('company_stage', '').lower()
+            if 'operating' in company_stage or 'established' in company_stage:
+                if not company_data.get('annual_revenue'):
+                    missing_data.append(('annual_revenue', 'Annual Revenue', 'text'))
+                if not company_data.get('customer_count'):
+                    missing_data.append(('customer_count', 'Number of Customers/Users', 'text'))
+                if not company_data.get('growth_rate'):
+                    missing_data.append(('growth_rate', 'Growth Rate', 'text'))
+            
+            # If missing critical data, show questionnaire
+            if missing_data:
+                st.warning("⚠️ **Missing Important Data** - Please fill these to create a better pitch deck:")
+                with st.expander("📝 Fill Missing Information", expanded=True):
+                    for field_id, field_label, field_type in missing_data:
+                        if field_type == 'textarea':
+                            value = st.text_area(
+                                f"**{field_label}**",
+                                value=company_data.get(field_id, ''),
+                                key=f"missing_{field_id}",
+                                help=f"This information is important for your pitch deck"
+                            )
+                        else:
+                            value = st.text_input(
+                                f"**{field_label}**",
+                                value=company_data.get(field_id, ''),
+                                key=f"missing_{field_id}",
+                                help=f"This information is important for your pitch deck"
+                            )
+                        if value:
+                            st.session_state.company_data[field_id] = value
+                    
+                    if st.button("✅ Save & Continue", key="save_missing_data"):
+                        st.success("✅ Data saved! You can now generate slides.")
+                        st.rerun()
+        
         if st.button("🎯 Generate Slides"):
             if st.session_state.company_data:
-                with st.spinner("Generating slides and creating professional PowerPoint..."):
-                    slides_data = agent.generate_slides(st.session_state.company_data)
+                # Show info about AI provider
+                if enhance_with_ai:
+                    if ai_provider == "Gemini":
+                        st.info("🤖 Using **Gemini** for AI enhancement. If quota is exceeded, will automatically fallback to OpenAI.")
+                    elif ai_provider == "OpenAI":
+                        st.info("🤖 Using **ChatGPT (OpenAI)** for AI enhancement.")
+                    else:
+                        st.info("🤖 Using **Auto mode**: Will try Gemini first, then automatically fallback to OpenAI if needed.")
+                
+                with st.spinner("Generating slides, PowerPoint, Gamma.ai, and Canva presentations..."):
+                    # Include AI provider in company data
+                    company_data_with_themes = {
+                        **st.session_state.company_data,
+                        "enhance_with_ai": enhance_with_ai,  # Pass AI enhancement preference
+                        "ai_provider": ai_provider  # 🆕 Pass AI provider preference
+                    }
+                    slides_data = agent.generate_slides(company_data_with_themes)
                     st.session_state.slides = slides_data
                     st.session_state.current_slide = 0
                     
                     success_msg = f"✅ Generated {slides_data.get('total_slides', 0)} slides!"
+                    
+                    # Check what was generated
                     if slides_data.get('pptx_path'):
-                        success_msg += f"\n📊 Professional PowerPoint created!"
                         st.success(success_msg)
-                        # Auto-download option
+                    
+                    # Show PowerPoint status and download
+                    if slides_data.get('pptx_path'):
                         pptx_path = Path(slides_data['pptx_path'])
                         if pptx_path.exists():
+                            st.markdown("---")
+                            st.success("📊 **PowerPoint Generated Successfully!**")
                             with open(pptx_path, 'rb') as f:
                                 st.download_button(
-                                    "⬇ Download PowerPoint",
-                                    f,
+                                    "⬇️ Download PowerPoint Presentation",
+                                    f.read(),
                                     file_name=pptx_path.name,
-                                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                    help="Download the complete PowerPoint with all slides",
+                                    use_container_width=True
                                 )
+                            st.caption(f"✅ {slides_data.get('total_slides', 0)} slides ready to download")
+                        else:
+                            st.warning(f"⚠️ PowerPoint file not found at: {pptx_path}")
+                    elif slides_data.get('pptx_error'):
+                        st.error(f"❌ PowerPoint generation failed: {slides_data.get('pptx_error')}")
+                        st.info("💡 Try clicking '📊 Export PPTX' button in the export section below")
                     else:
-                        st.success(success_msg)
+                        # Try to generate PowerPoint if it wasn't auto-generated
+                        st.info("ℹ️ PowerPoint not auto-generated. Generating now...")
+                        try:
+                            from src.utils.exporters import PitchExporter
+                            exporter = PitchExporter()
+                            # Get AI enhancement preference (default: True)
+                            enhance_with_ai = st.session_state.get('enhance_with_ai', True)
+                            ai_provider = st.session_state.get('ai_provider', 'auto')  # 🆕 Get AI provider
+                            company_data = st.session_state.get('company_data', {})
+                            pptx_path = exporter.export_to_powerpoint(
+                                slides_data["slides"],
+                                slides_data.get('company_name', 'Company'),
+                                include_images=True,
+                                enhance_with_ai=enhance_with_ai,
+                                company_data=company_data,  # 🆕 Pass company data
+                                full_rewrite=True,  # 🆕 Enable full AI rewrite
+                                ai_provider=ai_provider  # 🆕 Pass AI provider
+                            )
+                            if pptx_path and Path(pptx_path).exists():
+                                slides_data['pptx_path'] = pptx_path
+                                st.session_state.slides['pptx_path'] = pptx_path
+                                st.success("✅ PowerPoint generated!")
+                                with open(pptx_path, 'rb') as f:
+                                    st.download_button(
+                                        "⬇️ Download PowerPoint",
+                                        f.read(),
+                                        file_name=Path(pptx_path).name,
+                                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                        use_container_width=True
+                                    )
+                            else:
+                                st.warning("⚠️ PowerPoint generation returned no file. Check terminal for errors.")
+                        except Exception as e:
+                            st.error(f"❌ Failed to generate PowerPoint: {e}")
+                            st.info("💡 Use '📊 Export PPTX' button below to try manually")
+                    
+                    # Show Gamma and Canva links if available
+                    if slides_data.get('gamma_presentation', {}).get('success'):
+                        gamma = slides_data['gamma_presentation']
+                        st.info(f"🤖 **Gamma.ai:** [View Presentation]({gamma.get('presentation_url', '#')}) | [Edit]({gamma.get('edit_url', '#')})")
+                    
+                    if slides_data.get('canva_presentation', {}).get('success'):
+                        canva = slides_data['canva_presentation']
+                        st.info(f"🎨 **Canva:** [View Design]({canva.get('design_url', '#')}) | [Edit]({canva.get('edit_url', '#')})")
+                    
                     st.rerun()
             else:
                 st.warning("Please enter company details first!")

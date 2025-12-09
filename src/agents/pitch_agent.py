@@ -84,18 +84,102 @@ class PitchAgent(BaseAgent):
             "type": "textarea",
             "required": False,
             "placeholder": "What makes you different from competitors..."
+        },
+        {
+            "id": "company_stage",
+            "question": "📊 Is your company already operating or just an idea?",
+            "type": "select",
+            "options": ["Just an idea", "Early stage (prototype/MVP)", "Operating with customers", "Established business"],
+            "required": True,
+            "help": "This determines if we ask for financial data"
+        },
+        {
+            "id": "annual_revenue",
+            "question": "💰 Annual Revenue (if applicable)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $500K, $2M, Not applicable",
+            "conditional": {"company_stage": ["Operating with customers", "Established business"]}
+        },
+        {
+            "id": "ebitda",
+            "question": "📈 EBITDA (Earnings Before Interest, Taxes, Depreciation, Amortization)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $100K, -$50K, Not applicable",
+            "conditional": {"company_stage": ["Operating with customers", "Established business"]}
+        },
+        {
+            "id": "monthly_recurring_revenue",
+            "question": "🔄 Monthly Recurring Revenue (MRR) - if SaaS/subscription model",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $25K MRR, Not applicable"
+        },
+        {
+            "id": "customer_count",
+            "question": "👥 Number of customers/users",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., 500 customers, 10K users"
+        },
+        {
+            "id": "growth_rate",
+            "question": "📊 Monthly/Annual Growth Rate",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., 20% MoM, 150% YoY"
+        },
+        {
+            "id": "current_valuation",
+            "question": "💎 Current Company Valuation (if known)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $5M pre-money, Not set yet"
+        },
+        {
+            "id": "equity_offering",
+            "question": "📋 Equity % being offered in this round",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., 15%, 20%"
+        },
+        {
+            "id": "use_of_funds",
+            "question": "🎯 Use of Funds (how will you spend the investment?)",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "e.g., 40% product development, 30% marketing, 20% team, 10% operations"
+        },
+        {
+            "id": "projected_revenue",
+            "question": "🔮 Projected Revenue (12-24 months)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $2M in 12 months, $5M in 24 months"
+        },
+        {
+            "id": "key_metrics",
+            "question": "📊 Key Metrics (CAC, LTV, Churn, etc.)",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "e.g., CAC: $50, LTV: $500, Churn: 5% monthly"
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Pitch Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("pitch", retriever, model=model)
+        # Use Gemini model if provider is Gemini
+        if ai_provider.lower() in ["gemini", "auto"]:
+            model = "gemini-2.0-flash"
+        super().__init__("pitch", retriever, model=model, ai_provider=ai_provider)
         logger.info("PitchAgent initialized")
     
     def generate_from_outline(self, outline: Dict, company_context: Optional[Dict] = None) -> Dict:
@@ -375,6 +459,25 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
         
         # Extract company data for personalization
         company_data = self._extract_company_data(company_details)
+        
+        # 🆕 Check if AI provider is specified in company_data and switch if needed
+        ai_provider = company_data.get('ai_provider', '').lower() if company_data else ''
+        if ai_provider and ai_provider != self.ai_provider:
+            # Switch to the requested provider
+            if ai_provider in ["gemini", "auto"]:
+                try:
+                    import google.generativeai as genai
+                    import os
+                    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                    if gemini_key:
+                        genai.configure(api_key=gemini_key)
+                        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                        self.use_gemini = True
+                        self.ai_provider = ai_provider
+                        logger.info(f"✅ Switched to Gemini for slide generation")
+                except Exception as e:
+                    logger.warning(f"Could not switch to Gemini: {e}, using current provider")
+        
         # Generate response
         response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
@@ -450,16 +553,40 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
             try:
                 from ..utils.exporters import PitchExporter
                 exporter = PitchExporter()
+                # Get AI enhancement preference from company_data (default: True)
+                enhance_with_ai = company_details.get("enhance_with_ai", True)
+                ai_provider = company_details.get("ai_provider", "auto")  # 🆕 Get AI provider preference
+                # Pass company_data for financial charts and intelligent filtering
                 pptx_path = exporter.export_to_powerpoint(
                     slides_result["slides"],
                     slides_result["company_name"],
-                    include_images=True
+                    include_images=True,
+                    enhance_with_ai=enhance_with_ai,
+                    company_data=company_details,  # 🆕 Pass company data for charts/filtering
+                    full_rewrite=True,  # 🆕 Enable full AI rewrite
+                    ai_provider=ai_provider  # 🆕 Pass AI provider preference
                 )
                 if pptx_path:
                     slides_result["pptx_path"] = pptx_path
                     logger.info(f"Auto-generated PowerPoint: {pptx_path}")
             except Exception as e:
-                logger.warning(f"Could not auto-generate PowerPoint: {e}")
+                logger.error(f"Could not auto-generate PowerPoint: {e}", exc_info=True)
+                # Store error info
+                slides_result["pptx_error"] = str(e)
+            
+            # Gamma and Canva removed - not working
+                if canva_result.get("success"):
+                    logger.info(f"✅ Canva presentation created: {canva_result.get('design_url')}")
+                else:
+                    logger.warning(f"Canva presentation creation failed: {canva_result.get('error', 'Unknown')}")
+            except Exception as e:
+                logger.error(f"Could not create Canva presentation: {e}", exc_info=True)
+                # Store error info for debugging
+                slides_result["canva_presentation"] = {
+                    "success": False,
+                    "error": str(e),
+                    "message": f"Canva generation failed: {e}"
+                }
             
             return slides_result
         except json.JSONDecodeError as e:
@@ -921,4 +1048,3 @@ Be constructive, actionable, and specific. Reference the examples and best pract
         
         return "\n\n".join(formatted)
 
-    
