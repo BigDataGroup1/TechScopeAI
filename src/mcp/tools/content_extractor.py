@@ -106,3 +106,4 @@ class ContentExtractorTool(MCPTool):
             }
         }
 
+

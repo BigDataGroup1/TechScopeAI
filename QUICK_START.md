@@ -79,3 +79,4 @@ python -c "from src.rag.embedder import Embedder; from src.rag.vector_store impo
 
 **Need Help?** Check `GETTING_STARTED.md` for detailed troubleshooting.
 
+
