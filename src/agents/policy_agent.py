@@ -167,15 +167,16 @@ class PolicyAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Policy Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("policy", retriever, model=model)
+        super().__init__("policy", retriever, model=model, ai_provider=ai_provider)
         logger.info("PolicyAgent initialized")
     
     def generate_privacy_policy(self, company_context: Dict) -> Dict:

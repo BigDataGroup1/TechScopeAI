@@ -205,7 +205,8 @@ def load_patent_agent():
         )
         
         # Initialize agent (has built-in web search fallback)
-        agent = PatentAgent(retriever)
+        # Initialize agent with "auto" mode for automatic Gemini fallback on quota errors
+        agent = PatentAgent(retriever, model="gpt-4-turbo-preview", ai_provider="auto")
         return agent, None
     except Exception as e:
         return None, str(e)
@@ -231,8 +232,8 @@ def load_policy_agent():
             embedder=embedder
         )
         
-        # Initialize agent (has built-in web search fallback)
-        agent = PolicyAgent(retriever)
+        # Initialize agent with "auto" mode for automatic Gemini fallback on quota errors
+        agent = PolicyAgent(retriever, model="gpt-4-turbo-preview", ai_provider="auto")
         return agent, None
     except Exception as e:
         return None, str(e)
@@ -259,7 +260,8 @@ def load_marketing_agent():
         )
         
         # Initialize agent (has built-in web search fallback and image generation)
-        agent = MarketingAgent(retriever)
+        # Initialize agent with "auto" mode for automatic Gemini fallback on quota errors
+        agent = MarketingAgent(retriever, model="gpt-4-turbo-preview", ai_provider="auto")
         return agent, None
     except Exception as e:
         return None, str(e)
@@ -286,7 +288,8 @@ def load_team_agent():
         )
         
         # Initialize agent (has built-in web search fallback)
-        agent = TeamAgent(retriever)
+        # Initialize agent with "auto" mode for automatic Gemini fallback on quota errors
+        agent = TeamAgent(retriever, model="gpt-4-turbo-preview", ai_provider="auto")
         return agent, None
     except Exception as e:
         return None, str(e)
@@ -2079,7 +2082,19 @@ def main():
         st.markdown("---")
         st.subheader("📱 Marketing Content Questionnaire")
         
-        questionnaire = get_marketing_questionnaire()
+        full_questionnaire = get_marketing_questionnaire()
+        questionnaire = full_questionnaire.copy()
+        
+        # Filter questions based on existing company_data
+        if st.session_state.company_data:
+            from src.utils.marketing_question_analyzer import MarketingQuestionAnalyzer
+            analyzer = MarketingQuestionAnalyzer(st.session_state.company_data)
+            questionnaire = analyzer.get_missing_questions(questionnaire)
+            # Auto-fill answers from company_data
+            st.session_state.marketing_answers = analyzer.update_answers_with_company_data(st.session_state.marketing_answers)
+            skipped_count = len(full_questionnaire) - len(questionnaire)
+            if skipped_count > 0:
+                st.info(f"💡 Using your existing company data - skipped {skipped_count} question(s) you've already provided!")
         
         # Filter questions based on dependencies
         visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.marketing_answers)]
@@ -2244,7 +2259,19 @@ def main():
         st.markdown("---")
         st.subheader("📋 Policy & Compliance Questionnaire")
         
-        questionnaire = get_policy_questionnaire()
+        full_questionnaire = get_policy_questionnaire()
+        questionnaire = full_questionnaire.copy()
+        
+        # Filter questions based on existing company_data
+        if st.session_state.company_data:
+            from src.utils.policy_question_analyzer import PolicyQuestionAnalyzer
+            analyzer = PolicyQuestionAnalyzer(st.session_state.company_data)
+            questionnaire = analyzer.get_missing_questions(questionnaire)
+            # Auto-fill answers from company_data
+            st.session_state.policy_answers = analyzer.update_answers_with_company_data(st.session_state.policy_answers)
+            skipped_count = len(full_questionnaire) - len(questionnaire)
+            if skipped_count > 0:
+                st.info(f"💡 Using your existing company data - skipped {skipped_count} question(s) you've already provided!")
         
         # Filter questions based on dependencies
         visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.policy_answers)]
@@ -2369,30 +2396,53 @@ def main():
                                 policy_priority = [policy_priority]
                             
                             # Generate requested policies
-                            responses = []
-                            if 'Privacy Policy' in policy_priority:
-                                response = policy_agent.generate_privacy_policy(policy_context)
-                                responses.append(("Privacy Policy", response))
-                            if 'Terms of Service' in policy_priority:
-                                response = policy_agent.generate_terms_of_service(policy_context)
-                                responses.append(("Terms of Service", response))
-                            if not responses:
-                                # Default to privacy policy
-                                response = policy_agent.generate_privacy_policy(policy_context)
-                                responses.append(("Privacy Policy", response))
-                            
-                            # Combine responses
-                            combined_response = "# 📋 Generated Policies\n\n"
-                            all_sources = []
-                            for policy_name, resp in responses:
-                                combined_response += f"## {policy_name}\n\n{resp['response']}\n\n---\n\n"
-                                all_sources.extend(resp.get('sources', []))
-                            
-                            st.session_state.messages.append({
-                                "role": "assistant",
-                                "content": combined_response,
-                                "sources": all_sources
-                            })
+                            try:
+                                responses = []
+                                if 'Privacy Policy' in policy_priority:
+                                    response = policy_agent.generate_privacy_policy(policy_context)
+                                    responses.append(("Privacy Policy", response))
+                                if 'Terms of Service' in policy_priority:
+                                    response = policy_agent.generate_terms_of_service(policy_context)
+                                    responses.append(("Terms of Service", response))
+                                if not responses:
+                                    # Default to privacy policy
+                                    response = policy_agent.generate_privacy_policy(policy_context)
+                                    responses.append(("Privacy Policy", response))
+                                
+                                # Combine responses
+                                combined_response = "# 📋 Generated Policies\n\n"
+                                all_sources = []
+                                for policy_name, resp in responses:
+                                    combined_response += f"## {policy_name}\n\n{resp['response']}\n\n---\n\n"
+                                    all_sources.extend(resp.get('sources', []))
+                                
+                                st.session_state.messages.append({
+                                    "role": "assistant",
+                                    "content": combined_response,
+                                    "sources": all_sources
+                                })
+                            except Exception as e:
+                                error_str = str(e)
+                                # Check if it's a quota error
+                                is_quota_error = ("429" in error_str or "quota" in error_str.lower() or 
+                                                "insufficient_quota" in error_str.lower() or 
+                                                "RateLimitError" in str(type(e).__name__))
+                                
+                                if is_quota_error:
+                                    st.error("""
+                                    **⚠️ OpenAI Quota Exceeded**
+                                    
+                                    Your OpenAI API quota has been exceeded. The system is trying to automatically fallback to Gemini...
+                                    If you continue to see this error, please:
+                                    1. **Wait a few minutes** and try again (if it's rate limiting)
+                                    2. **Check your OpenAI billing** at https://platform.openai.com/account/billing
+                                    3. **Add credits** to your OpenAI account
+                                    4. **Verify GEMINI_API_KEY** is set in your .env file for automatic fallback
+                                    """)
+                                    logger.error(f"OpenAI quota error in Policy Agent: {e}")
+                                else:
+                                    st.error(f"**Error generating policies:** {error_str}")
+                                    logger.error(f"Error in Policy Agent: {e}", exc_info=True)
                             
                             # Reset questionnaire
                             st.session_state.policy_questionnaire_active = False
@@ -2575,7 +2625,19 @@ def main():
         st.markdown("---")
         st.subheader("🔬 Patent Analysis Questionnaire")
         
-        questionnaire = get_patent_questionnaire()
+        full_questionnaire = get_patent_questionnaire()
+        questionnaire = full_questionnaire.copy()
+        
+        # Filter questions based on existing company_data
+        if st.session_state.company_data:
+            from src.utils.patent_question_analyzer import PatentQuestionAnalyzer
+            analyzer = PatentQuestionAnalyzer(st.session_state.company_data)
+            questionnaire = analyzer.get_missing_questions(questionnaire)
+            # Auto-fill answers from company_data
+            st.session_state.patent_answers = analyzer.update_answers_with_company_data(st.session_state.patent_answers)
+            skipped_count = len(full_questionnaire) - len(questionnaire)
+            if skipped_count > 0:
+                st.info(f"💡 Using your existing company data - skipped {skipped_count} question(s) you've already provided!")
         
         # Filter questions based on dependencies
         visible_questions = [q for q in questionnaire if should_show_question(q, st.session_state.patent_answers)]

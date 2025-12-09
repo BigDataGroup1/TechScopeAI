@@ -127,15 +127,16 @@ class MarketingAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Marketing Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("marketing", retriever, model=model)
+        super().__init__("marketing", retriever, model=model, ai_provider=ai_provider)
         self.image_cache_dir = Path("exports/marketing_images")
         self.image_cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info("MarketingAgent initialized")
