@@ -15,15 +15,16 @@ logger = logging.getLogger(__name__)
 class CoordinatorAgent(BaseAgent):
     """Agent that coordinates between all agents, maintains knowledge base, and ensures consistency."""
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Coordinator Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("coordinator", retriever, model=model)
+        super().__init__("coordinator", retriever, model=model, ai_provider=ai_provider)
         self.knowledge_base = {}  # In-memory knowledge store
         self.knowledge_dir = Path("data/coordinator_knowledge")
         self.knowledge_dir.mkdir(parents=True, exist_ok=True)

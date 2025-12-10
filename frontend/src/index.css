@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-gray-900;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 25%, #a855f7 50%, #9333ea 75%, #7c3aed 100%);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary-700 transition-colors duration-200 shadow-md hover:shadow-lg;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors duration-200;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all;
+  }
+  
+  .card {
+    @apply bg-white/95 backdrop-blur-md rounded-xl shadow-xl p-6 border border-white/20;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  }
+  
+  /* Markdown content styling */
+  .prose {
+    @apply text-gray-700;
+  }
+  
+  .prose h1 {
+    @apply text-lg font-bold mb-3 mt-4;
+  }
+  
+  .prose h2 {
+    @apply text-base font-bold mb-2 mt-3;
+  }
+  
+  .prose h3 {
+    @apply text-sm font-bold mb-2 mt-2;
+  }
+  
+  .prose h4 {
+    @apply text-xs font-semibold mb-1 mt-2;
+  }
+  
+  .prose p {
+    @apply mb-2 leading-relaxed;
+  }
+  
+  .prose ul {
+    @apply list-disc list-inside mb-2 space-y-1 ml-2;
+  }
+  
+  .prose ol {
+    @apply list-decimal list-inside mb-2 space-y-1 ml-2;
+  }
+  
+  .prose li {
+    @apply mb-1;
+  }
+  
+  .prose strong {
+    @apply font-semibold;
+  }
+  
+  .prose em {
+    @apply italic;
+  }
+  
+  .prose code {
+    @apply bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono;
+  }
+  
+  .prose pre {
+    @apply bg-gray-100 p-2 rounded mb-2 overflow-x-auto;
+  }
+  
+  .prose pre code {
+    @apply bg-transparent p-0;
+  }
+  
+  .prose a {
+    @apply text-purple-600 hover:underline;
+  }
+  
+  .prose blockquote {
+    @apply border-l-4 border-purple-300 pl-3 italic my-2;
+  }
+  
+  .prose hr {
+    @apply border-gray-300 my-4;
+  }
+  
+  /* Custom scrollbar for activity report */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, #8b5cf6, #6366f1);
+    border-radius: 10px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(to bottom, #7c3aed, #4f46e5);
+  }
+}
+
+@layer utilities {
+  .animate-blob {
+    animation: blob 7s infinite;
+  }
+  
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+  
+  .animation-delay-6000 {
+    animation-delay: 6s;
+  }
+  
+  @keyframes blob {
+    0% {
+      transform: translate(0px, 0px) scale(1);
+    }
+    33% {
+      transform: translate(30px, -50px) scale(1.1);
+    }
+    66% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+    100% {
+      transform: translate(0px, 0px) scale(1);
+    }
+  }
+  
+  @keyframes gradientShift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+}

@@ -127,15 +127,16 @@ class MarketingAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Marketing Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("marketing", retriever, model=model)
+        super().__init__("marketing", retriever, model=model, ai_provider=ai_provider)
         self.image_cache_dir = Path("exports/marketing_images")
         self.image_cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info("MarketingAgent initialized")
@@ -225,9 +226,23 @@ When generating responses:
         # Extract image description from response and generate image
         image_result = None
         try:
-            # Get product description from context
-            product_desc = marketing_context.get('solution', marketing_context.get('product_description', marketing_context.get('company_name', 'product')))
+            # Get product description from context - handle if it's a list
+            product_desc_raw = marketing_context.get('solution', marketing_context.get('product_description', marketing_context.get('company_name', 'product')))
+            # Convert to string if it's a list - do this FIRST before any use
+            if isinstance(product_desc_raw, list):
+                product_desc = ' '.join(str(item) for item in product_desc_raw) if product_desc_raw else 'product'
+            else:
+                product_desc = str(product_desc_raw) if product_desc_raw else 'product'
+            
+            # Ensure it's always a string (safety check)
+            if not isinstance(product_desc, str):
+                product_desc = str(product_desc) if product_desc else 'product'
+            
             style = marketing_context.get('content_style', 'Professional')
+            # Handle style if it's a list
+            if isinstance(style, list):
+                style = style[0] if style else 'Professional'
+            style = str(style) if style else 'Professional'
             
             # Try to extract image description from the response
             image_description = None
@@ -251,9 +266,27 @@ When generating responses:
             
             # If no image description found, create one from company data
             if not image_description:
-                company_name = marketing_context.get('company_name', '')
+                # Handle company_name - could be string or list
+                company_name_raw = marketing_context.get('company_name', '')
+                if isinstance(company_name_raw, list):
+                    company_name = company_name_raw[0] if company_name_raw else ''
+                else:
+                    company_name = str(company_name_raw) if company_name_raw else ''
+                
                 # Check if this is for presentation/PPT (from context or platform)
-                is_for_presentation = marketing_context.get('platform', '').lower() in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+                # Handle platform as string or list (from multiselect)
+                platform_value = marketing_context.get('platform', '')
+                if isinstance(platform_value, list):
+                    platform_value = platform_value[0] if platform_value else ''
+                platform_str = str(platform_value).lower() if platform_value else ''
+                is_for_presentation = platform_str in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+                
+                # Ensure product_desc is a string (already handled above, but double-check)
+                if isinstance(product_desc, list):
+                    product_desc = ' '.join(str(item) for item in product_desc) if product_desc else 'product'
+                else:
+                    product_desc = str(product_desc) if product_desc else 'product'
+                
                 if company_name:
                     if is_for_presentation:
                         image_description = f"Professional presentation image for {company_name}: {product_desc}, business presentation, corporate quality, clean and polished"
@@ -265,22 +298,46 @@ When generating responses:
                     else:
                         image_description = f"{style} marketing image for {product_desc}, Instagram post, social media, modern design, professional"
             
-            # Check if this is for presentation/PPT
-            is_for_presentation = marketing_context.get('platform', '').lower() in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+            # Check if this is for presentation/PPT or which platform
+            # Handle platform as string or list (from multiselect)
+            platform_value = marketing_context.get('platform', '')
+            if isinstance(platform_value, list):
+                platform_value = platform_value[0] if platform_value else ''
+            platform_str = str(platform_value).lower() if platform_value else ''
+            is_for_presentation = platform_str in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+            is_linkedin = 'linkedin' in platform_str or (isinstance(marketing_context.get('platform'), list) and 'LinkedIn' in marketing_context.get('platform', []))
+            is_instagram = 'instagram' in platform_str or (isinstance(marketing_context.get('platform'), list) and 'Instagram' in marketing_context.get('platform', []))
             
             # Generate the image
-            logger.info(f"Generating {'presentation' if is_for_presentation else 'Instagram'} image automatically for: {product_desc}")
+            logger.info(f"Generating {'presentation' if is_for_presentation else ('LinkedIn' if is_linkedin else 'Instagram')} image automatically for: {product_desc}")
             logger.info(f"Image description: {image_description}")
             
+            # Get image provider from marketing context (from user choice)
+            # Default to Gemini since DALL-E URLs expire quickly
+            image_provider_raw = marketing_context.get('image_provider', 'gemini')
+            if isinstance(image_provider_raw, list):
+                image_provider = str(image_provider_raw[0]).lower() if image_provider_raw else 'gemini'
+            else:
+                image_provider = str(image_provider_raw).lower() if image_provider_raw else 'gemini'
+            if image_provider not in ['dalle', 'gemini']:
+                image_provider = 'gemini'  # Default to Gemini (more reliable)
+            
+            # product_desc is already a string (converted above)
             image_result = self.generate_marketing_image(
                 product_description=product_desc,
                 style=style,
                 image_style_description=image_description,
-                for_presentation=is_for_presentation
+                for_presentation=is_for_presentation,
+                image_provider=image_provider,
+                is_linkedin=is_linkedin,
+                is_instagram=is_instagram
             )
             
             if image_result and image_result.get('success'):
-                logger.info(f"✅ Image generated successfully: {image_result.get('image_path')}")
+                image_url = image_result.get('image_url')
+                logger.info(f"✅ Image generated successfully!")
+                logger.info(f"   Image URL: {image_url}")
+                logger.info(f"   Image Path: {image_result.get('image_path')} (None is expected - not saving locally)")
             else:
                 logger.warning(f"Image generation failed: {image_result}")
             
@@ -312,7 +369,9 @@ When generating responses:
             response_dict['image_url'] = image_result.get('image_url')
             response_dict['image_prompt'] = image_result.get('prompt_used')
             response_dict['success'] = True  # Mark as successful image generation
-            logger.info(f"✅ Instagram content with image ready: {response_dict.get('image_path')}")
+            logger.info(f"✅ Instagram content with image ready!")
+            logger.info(f"   Image URL in response: {response_dict.get('image_url')}")
+            logger.info(f"   Image Path: {response_dict.get('image_path')} (None is expected)")
         else:
             # Still return response, but log that image generation failed
             if image_result:
@@ -404,6 +463,93 @@ When generating responses:
         company_data = self._extract_company_data(marketing_context)
         response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
+        # Extract image description from response and generate image (same as Instagram)
+        image_result = None
+        try:
+            # Get product description from context - handle if it's a list
+            product_desc_raw = marketing_context.get('solution', marketing_context.get('product_description', marketing_context.get('company_name', 'product')))
+            # Convert to string if it's a list
+            if isinstance(product_desc_raw, list):
+                product_desc = ' '.join(str(item) for item in product_desc_raw) if product_desc_raw else 'product'
+            else:
+                product_desc = str(product_desc_raw) if product_desc_raw else 'product'
+            
+            # Ensure it's always a string
+            if not isinstance(product_desc, str):
+                product_desc = str(product_desc) if product_desc else 'product'
+            
+            style = marketing_context.get('content_style', 'Professional')
+            # Handle style if it's a list
+            if isinstance(style, list):
+                style = style[0] if style else 'Professional'
+            style = str(style) if style else 'Professional'
+            
+            # Try to extract image description from the response
+            image_description = None
+            if "Image Description" in response_text or "Image Prompt" in response_text:
+                lines = response_text.split('\n')
+                in_image_section = False
+                image_lines = []
+                for line in lines:
+                    if "Image Description" in line or "Image Prompt" in line:
+                        in_image_section = True
+                        continue
+                    if in_image_section:
+                        if line.strip() and not line.strip().startswith('-') and not line.strip().startswith('*'):
+                            image_lines.append(line.strip())
+                        elif line.strip().startswith('###') or line.strip().startswith('##') or line.strip().startswith('**'):
+                            break
+                
+                if image_lines:
+                    image_description = ' '.join(image_lines[:3])
+            
+            # If no image description found, create one
+            if not image_description:
+                company_name_raw = marketing_context.get('company_name', '')
+                if isinstance(company_name_raw, list):
+                    company_name = company_name_raw[0] if company_name_raw else ''
+                else:
+                    company_name = str(company_name_raw) if company_name_raw else ''
+                
+                if company_name:
+                    image_description = f"{style} marketing image for {company_name}: {product_desc}, LinkedIn post, professional business, modern design"
+                else:
+                    image_description = f"{style} marketing image for {product_desc}, LinkedIn post, professional business, modern design"
+            
+            # Generate the image
+            logger.info(f"Generating LinkedIn image automatically for: {product_desc}")
+            logger.info(f"Image description: {image_description}")
+            
+            # Get image provider
+            image_provider_raw = marketing_context.get('image_provider', 'dalle')
+            if isinstance(image_provider_raw, list):
+                image_provider = str(image_provider_raw[0]).lower() if image_provider_raw else 'dalle'
+            else:
+                image_provider = str(image_provider_raw).lower() if image_provider_raw else 'dalle'
+            if image_provider not in ['dalle', 'gemini']:
+                image_provider = 'dalle'
+            
+            image_result = self.generate_marketing_image(
+                product_description=product_desc,
+                style=style,
+                image_style_description=image_description,
+                for_presentation=False,
+                image_provider=image_provider,
+                is_linkedin=True,
+                is_instagram=False
+            )
+            
+            if image_result and image_result.get('success'):
+                image_url = image_result.get('image_url')
+                logger.info(f"✅ LinkedIn image generated successfully!")
+                logger.info(f"   Image URL: {image_url}")
+            else:
+                logger.warning(f"LinkedIn image generation failed: {image_result}")
+            
+        except Exception as e:
+            logger.error(f"Error generating LinkedIn image automatically: {e}", exc_info=True)
+            image_result = None
+        
         all_sources = linkedin_data.get('sources', [])
         for web_result in web_results:
             all_sources.append({
@@ -412,27 +558,55 @@ When generating responses:
                 'similarity': web_result.get('relevance_score', 0)
             })
         
-        return self.format_response(
+        # Format base response
+        response_dict = self.format_response(
             response=response_text,
             sources=all_sources
         )
+        
+        # If image was generated, include it in the response
+        if image_result and image_result.get('success'):
+            response_dict['image_generated'] = True
+            response_dict['image_path'] = image_result.get('image_path')
+            response_dict['image_url'] = image_result.get('image_url')
+            response_dict['image_prompt'] = image_result.get('prompt_used')
+            response_dict['success'] = True
+            logger.info(f"✅ LinkedIn content with image ready: {response_dict.get('image_url')}")
+        else:
+            if image_result:
+                logger.warning(f"LinkedIn image generation failed: {image_result.get('error', 'Unknown error')}")
+            else:
+                logger.warning("LinkedIn image generation was not attempted or returned None")
+            response_dict['image_generated'] = False
+        
+        return response_dict
     
     def generate_marketing_image(self, product_description: str, style: str, 
                                  image_style_description: Optional[str] = None,
-                                 for_presentation: bool = False) -> Dict:
+                                 for_presentation: bool = False,
+                                 image_provider: str = "dalle",
+                                 is_linkedin: bool = False,
+                                 is_instagram: bool = True) -> Dict:
         """
-        Generate marketing image using DALL-E 3.
+        Generate marketing image using DALL-E 3 or Gemini.
         
         Args:
             product_description: Description of product/service
             style: Content style (quirky, professional, trendy)
             image_style_description: Optional additional style description
             for_presentation: If True, generate professional presentation-quality image for PPT
+            image_provider: Image generation provider ("dalle" or "gemini")
             
         Returns:
             Dictionary with image URL and path
         """
-        logger.info(f"Generating marketing image with style: {style}, for_presentation: {for_presentation}")
+        logger.info(f"Generating marketing image with style: {style}, provider: {image_provider}, for_presentation: {for_presentation}")
+        
+        # Use Gemini if requested
+        if image_provider.lower() == "gemini":
+            return self._generate_image_with_gemini(
+                product_description, style, image_style_description, for_presentation
+            )
         
         # Build image prompt based on style
         if for_presentation:
@@ -467,25 +641,46 @@ When generating responses:
             full_prompt = f"{style_prompt} marketing image for: {product_description}{presentation_suffix}, 1024x1024"
         
         try:
+            # Determine image size based on platform
+            # Instagram: 1024x1024 (square), LinkedIn: 1024x1024 (DALL-E 3 only supports square, but we'll note it's for LinkedIn)
+            if is_linkedin and not for_presentation:
+                # LinkedIn prefers landscape, but DALL-E 3 only does square, so we'll use square and note it
+                image_size = "1024x1024"
+                full_prompt += ", LinkedIn post format, professional landscape orientation feel"
+            elif is_instagram and not for_presentation:
+                image_size = "1024x1024"  # Instagram square
+                full_prompt += ", Instagram post format, square orientation"
+            else:
+                image_size = "1024x1024"  # Default square
+            
             # Generate image using DALL-E 3
             # Note: DALL-E 3 doesn't support 'n' parameter - it always generates 1 image
             response = self.client.images.generate(
                 model="dall-e-3",
                 prompt=full_prompt,
-                size="1024x1024",
+                size=image_size,
                 quality="standard"
             )
             
             image_url = response.data[0].url
             
-            # Download and save image
-            image_path = self._download_image(image_url, product_description)
+            # Don't download and save image locally - just return URL
+            # Image will be displayed directly from URL
+            # Determine size based on platform
+            # Instagram: 1080x1080 (square), LinkedIn: 1200x627 (landscape)
+            platform_size = "1024x1024"  # Default square for Instagram
+            if for_presentation:
+                platform_size = "1024x1024"  # Square for presentations
+            else:
+                # Check if this is for LinkedIn (would need context, defaulting to Instagram size)
+                platform_size = "1024x1024"  # Instagram square format
             
             return {
                 "success": True,
                 "image_url": image_url,
-                "image_path": str(image_path),
-                "prompt_used": full_prompt
+                "image_path": None,  # Don't save locally
+                "prompt_used": full_prompt,
+                "platform_size": platform_size
             }
             
         except Exception as e:
@@ -495,6 +690,94 @@ When generating responses:
                 "error": str(e),
                 "message": "Could not generate image. Try using stock images instead."
             }
+    
+    def _generate_image_with_gemini(self, product_description: str, style: str,
+                                    image_style_description: Optional[str] = None,
+                                    for_presentation: bool = False) -> Dict:
+        """
+        Generate marketing image using Gemini image generation API.
+        
+        Args:
+            product_description: Description of product/service
+            style: Content style (quirky, professional, trendy)
+            image_style_description: Optional additional style description
+            for_presentation: If True, generate professional presentation-quality image
+            
+        Returns:
+            Dictionary with image path and metadata
+        """
+        try:
+            from ..utils.gemini_image_generator import GeminiImageGenerator
+            
+            gemini_gen = GeminiImageGenerator()
+            if not gemini_gen.enabled:
+                logger.warning("Gemini image generation not available, falling back to DALL-E")
+                return self.generate_marketing_image(
+                    product_description, style, image_style_description, 
+                    for_presentation, image_provider="dalle"
+                )
+            
+            # Build image prompt (same as DALL-E version)
+            if for_presentation:
+                style_prompts = {
+                    "Quirky/Fun": "professional, clean, modern business presentation, corporate quality, polished, executive-ready, presentation slide background, high-end business aesthetic",
+                    "Professional": "professional, clean, modern, business-focused, high-quality, corporate presentation, executive-ready, polished, presentation slide background, sophisticated",
+                    "Trendy/Modern": "professional, modern, sleek, contemporary, business presentation quality, corporate aesthetic, polished, executive-ready, presentation slide background",
+                    "Mix of styles": "professional, clean, modern, business presentation, corporate quality, polished, executive-ready, balanced professional aesthetic"
+                }
+                presentation_suffix = ", presentation slide background, professional business image, corporate quality, suitable for PowerPoint presentation, clean and polished, no random elements, business-appropriate, executive presentation quality"
+            else:
+                style_prompts = {
+                    "Quirky/Fun": "quirky, fun, playful, colorful, eye-catching, social media friendly, Instagram-worthy",
+                    "Professional": "professional, clean, modern, business-focused, high-quality, LinkedIn-ready",
+                    "Trendy/Modern": "trendy, modern, sleek, contemporary, Instagram-worthy, viral potential, social media optimized",
+                    "Mix of styles": "balanced, engaging, modern, professional yet approachable, social media ready"
+                }
+                presentation_suffix = ", high quality, social media ready, optimized for Instagram and LinkedIn"
+            
+            style_prompt = style_prompts.get(style, "professional, modern, engaging")
+            
+            # Combine prompts
+            if image_style_description:
+                if for_presentation:
+                    image_style_description = image_style_description.replace("Instagram post", "professional presentation")
+                    image_style_description = image_style_description.replace("social media", "business presentation")
+                full_prompt = f"{image_style_description}, {style_prompt}, marketing image for: {product_description}{presentation_suffix}, 1024x1024, high resolution"
+            else:
+                full_prompt = f"{style_prompt} marketing image for: {product_description}{presentation_suffix}, 1024x1024, high resolution"
+            
+            # Generate image using Gemini's image API directly
+            image_path = gemini_gen._generate_with_gemini_image_api(full_prompt, slide_number=999)
+            
+            if image_path and Path(image_path).exists():
+                # Convert file path to URL endpoint
+                # Extract just the filename
+                filename = Path(image_path).name
+                # Create URL endpoint for serving the image
+                image_url = f"/api/marketing/image/{filename}"
+                logger.info(f"✅ Generated marketing image with Gemini: {image_path}")
+                logger.info(f"   Image URL: {image_url}")
+                return {
+                    "success": True,
+                    "image_path": str(image_path),
+                    "image_url": image_url,  # URL endpoint to serve the image
+                    "prompt_used": full_prompt,
+                    "provider": "gemini"
+                }
+            else:
+                logger.warning("Gemini image generation returned no image, falling back to DALL-E")
+                return self.generate_marketing_image(
+                    product_description, style, image_style_description,
+                    for_presentation, image_provider="dalle"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error generating image with Gemini: {e}", exc_info=True)
+            logger.info("Falling back to DALL-E image generation")
+            return self.generate_marketing_image(
+                product_description, style, image_style_description,
+                for_presentation, image_provider="dalle"
+            )
     
     def suggest_marketing_strategies(self, marketing_context: Dict) -> Dict:
         """
@@ -723,4 +1006,101 @@ IMPORTANT - Ask for clarification and more details:
             response=response_text,
             sources=all_sources
         )
+    
+    def generate_from_prompt(self, user_prompt: str, company_data: Optional[Dict] = None) -> Dict:
+        """
+        Generate marketing content (posts, images) from a user's natural language prompt.
+        
+        Args:
+            user_prompt: User's request (e.g., "generate an Instagram post with image for my product")
+            company_data: Company context data
+            
+        Returns:
+            Generated marketing content with images
+        """
+        try:
+            # Extract company data
+            if not company_data:
+                company_data = {}
+            
+            # Merge with company signup data
+            merged_data = {**company_data}
+            
+            # Parse the prompt to determine what the user wants
+            prompt_lower = user_prompt.lower()
+            
+            # Determine platform(s)
+            platforms = []
+            if 'instagram' in prompt_lower or 'ig' in prompt_lower:
+                platforms.append('Instagram')
+            if 'linkedin' in prompt_lower or 'li' in prompt_lower:
+                platforms.append('LinkedIn')
+            if not platforms:
+                # Default to both if not specified
+                platforms = ['Both']
+            
+            # Determine if image is requested
+            generate_image = 'image' in prompt_lower or 'picture' in prompt_lower or 'photo' in prompt_lower
+            
+            # Determine content style from prompt
+            content_style = "Professional"
+            if 'trendy' in prompt_lower or 'modern' in prompt_lower:
+                content_style = "Trendy/Modern"
+            elif 'fun' in prompt_lower or 'quirky' in prompt_lower or 'playful' in prompt_lower:
+                content_style = "Quirky/Fun"
+            elif 'mix' in prompt_lower:
+                content_style = "Mix of styles"
+            
+            # Build marketing context from prompt and company data
+            marketing_context = {
+                **merged_data,
+                'platform': platforms,
+                'content_style': content_style,
+                'generate_image': "Yes, generate custom AI images" if generate_image else "No, do not generate images",
+                'image_provider': 'gemini',  # Default to Gemini
+                'user_prompt': user_prompt  # Include original prompt for context
+            }
+            
+            # Generate content based on platform selection
+            results = []
+            
+            if 'Instagram' in platforms or 'Both' in platforms:
+                logger.info("Generating Instagram content from prompt")
+                instagram_result = self.generate_instagram_content(marketing_context)
+                results.append({
+                    'platform': 'Instagram',
+                    'data': instagram_result
+                })
+            
+            if 'LinkedIn' in platforms or 'Both' in platforms:
+                logger.info("Generating LinkedIn content from prompt")
+                linkedin_result = self.generate_linkedin_content(marketing_context)
+                results.append({
+                    'platform': 'LinkedIn',
+                    'data': linkedin_result
+                })
+            
+            # If no specific platform, generate strategies
+            if not results:
+                logger.info("Generating marketing strategies from prompt")
+                strategies_result = self.suggest_marketing_strategies(marketing_context)
+                results.append({
+                    'platform': 'Strategies',
+                    'data': strategies_result
+                })
+            
+            # Format response
+            return {
+                'success': True,
+                'results': results,
+                'message': f'Generated marketing content based on your prompt: "{user_prompt}"'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating marketing from prompt: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e),
+                'message': f'Failed to generate marketing content: {e}'
+            }
 

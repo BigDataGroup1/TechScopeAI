@@ -44,7 +44,7 @@ class SupervisorAgent(BaseAgent):
         }
     }
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Supervisor Agent.
         
@@ -52,7 +52,7 @@ class SupervisorAgent(BaseAgent):
             retriever: Retriever instance for RAG
             model: LLM model name
         """
-        super().__init__("supervisor", retriever, model=model)
+        super().__init__("supervisor", retriever, model=model, ai_provider=ai_provider)
         self.agents = {}  # Will be populated with agent instances
         logger.info("SupervisorAgent initialized")
     
