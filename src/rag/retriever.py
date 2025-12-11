@@ -50,6 +50,7 @@ class Retriever:
         
         # Initialize QueryAgent if available
         self.query_agent_retriever = None
+        self.weaviate_client = None  # Store client for proper cleanup
         self.use_query_agent = False
         
         if QUERY_AGENT_AVAILABLE:
@@ -69,20 +70,45 @@ class Retriever:
             # Get Weaviate URL
             weaviate_url = os.getenv("WEAVIATE_URL", "http://localhost:8081")
             
+            # Normalize URL (remove protocol if present, we'll detect it)
+            url_lower = weaviate_url.lower()
+            normalized_url = weaviate_url.replace("https://", "").replace("http://", "")
+            
             # Connect to Weaviate
             weaviate_client = None
-            if weaviate_url.startswith("http://localhost") or weaviate_url.startswith("http://127.0.0.1"):
+            
+            # Detect Weaviate Cloud by domain pattern
+            is_cloud = (
+                ".weaviate.cloud" in normalized_url or 
+                ".weaviate.network" in normalized_url or
+                weaviate_url.startswith("https://")
+            )
+            
+            # Detect local Weaviate
+            is_local = (
+                "localhost" in normalized_url or 
+                "127.0.0.1" in normalized_url or
+                weaviate_url.startswith("http://localhost") or
+                weaviate_url.startswith("http://127.0.0.1")
+            )
+            
+            if is_local:
                 # Local Weaviate
                 try:
+                    # Extract port if specified
+                    url_parts = normalized_url.split(":")
+                    host = url_parts[0]
+                    port = int(url_parts[1]) if len(url_parts) > 1 else 8081
+                    
                     weaviate_client = weaviate.connect_to_local(
-                        host="localhost",
-                        port=8081
+                        host=host,
+                        port=port
                     )
-                    logger.info("✅ Connected to local Weaviate")
+                    logger.info(f"✅ Connected to local Weaviate at {host}:{port}")
                 except Exception as e:
                     logger.warning(f"Failed to connect to local Weaviate: {e}")
                     return
-            elif weaviate_url.startswith("https://"):
+            elif is_cloud:
                 # Weaviate Cloud
                 weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
                 if not weaviate_api_key or weaviate_api_key == "your_api_key_here":
@@ -90,8 +116,9 @@ class Retriever:
                     return
                 
                 try:
-                    # Parse URL: https://xxx.weaviate.cloud or https://xxx.weaviate.cloud:443
-                    url_parts = weaviate_url.replace("https://", "").split(":")
+                    # Parse URL: xxx.weaviate.cloud or https://xxx.weaviate.cloud
+                    # Extract just the hostname (remove protocol and port if any)
+                    url_parts = normalized_url.split(":")
                     host = url_parts[0]
                     
                     # Try to use weaviate.auth if available
@@ -106,19 +133,30 @@ class Retriever:
                     if openai_key:
                         headers["X-OpenAI-Api-Key"] = openai_key
                     
-                    weaviate_client = weaviate.connect_to_wcs(
-                        cluster_url=host,
-                        auth_credentials=auth_credentials,
-                        headers=headers if headers else None
-                    )
-                    logger.info("✅ Connected to Weaviate Cloud")
+                    # Use connect_to_weaviate_cloud instead of deprecated connect_to_wcs
+                    try:
+                        weaviate_client = weaviate.connect_to_weaviate_cloud(
+                            cluster_url=host,
+                            auth_credentials=auth_credentials,
+                            headers=headers if headers else None
+                        )
+                    except AttributeError:
+                        # Fallback to deprecated method for older weaviate-client versions
+                        weaviate_client = weaviate.connect_to_wcs(
+                            cluster_url=host,
+                            auth_credentials=auth_credentials,
+                            headers=headers if headers else None
+                        )
+                    logger.info(f"✅ Connected to Weaviate Cloud at {host}")
                 except Exception as e:
                     logger.warning(f"Failed to connect to Weaviate Cloud: {e}")
+                    import traceback
+                    logger.debug(traceback.format_exc())
                     return
             else:
                 # Custom URL
                 try:
-                    url_parts = weaviate_url.replace("http://", "").replace("https://", "").split(":")
+                    url_parts = normalized_url.split(":")
                     host = url_parts[0]
                     port = int(url_parts[1]) if len(url_parts) > 1 else 8081
                     is_secure = weaviate_url.startswith("https://")
@@ -139,11 +177,17 @@ class Retriever:
             # Initialize QueryAgent
             if weaviate_client:
                 try:
+                    self.weaviate_client = weaviate_client  # Store for cleanup
                     self.query_agent_retriever = QueryAgent(client=weaviate_client)
                     self.use_query_agent = True
                     logger.info("✅ QueryAgent initialized - using Weaviate for RAG")
                 except Exception as e:
                     logger.warning(f"Failed to initialize QueryAgent: {e}, falling back to PostgreSQL")
+                    # Close client if QueryAgent initialization failed
+                    try:
+                        weaviate_client.close()
+                    except:
+                        pass
                     self.use_query_agent = False
         
         except Exception as e:
@@ -179,81 +223,145 @@ class Retriever:
         """
         # Try QueryAgent first if available
         if self.use_query_agent and self.query_agent_retriever:
+            logger.debug("🔍 Using Weaviate QueryAgent (NOT PostgreSQL)")
             try:
                 # Map category_filter to Weaviate collection name
+                # Note: Weaviate collections use PascalCase (e.g., "Competitors_corpus")
+                # while our internal names use lowercase (e.g., "competitors_corpus")
                 weaviate_collection = None
                 if category_filter:
-                    # Map category_filter to AgentType first
-                    category_map = {
-                        "competitive": AgentType.COMPETITIVE,
-                        "pitch": AgentType.PITCH,
-                        "marketing": AgentType.MARKETING,
-                        "ip_legal": AgentType.IP_LEGAL,
-                        "patent": AgentType.IP_LEGAL,
-                        "policy": AgentType.POLICY,
-                        "team": AgentType.TEAM,
+                    # Direct mapping to Weaviate collection names (PascalCase)
+                    weaviate_collection_map = {
+                        "competitive": "Competitors_corpus",
+                        "pitch": "Pitch_examples_corpus",  # May not exist yet
+                        "marketing": "Marketing_corpus",
+                        "ip_legal": "Ip_policy_corpus",
+                        "patent": "Ip_policy_corpus",
+                        "policy": "Policy_corpus",
+                        "team": "Job_roles_corpus",
                     }
-                    agent_type = category_map.get(category_filter.lower())
-                    if agent_type:
-                        weaviate_collection = get_collection_name(agent_type)
+                    weaviate_collection = weaviate_collection_map.get(category_filter.lower())
+                    
+                    # If not found in direct map, try via AgentType (fallback)
+                    if not weaviate_collection:
+                        category_map = {
+                            "competitive": AgentType.COMPETITIVE,
+                            "pitch": AgentType.PITCH,
+                            "marketing": AgentType.MARKETING,
+                            "ip_legal": AgentType.IP_LEGAL,
+                            "patent": AgentType.IP_LEGAL,
+                            "policy": AgentType.POLICY,
+                            "team": AgentType.TEAM,
+                        }
+                        agent_type = category_map.get(category_filter.lower())
+                        if agent_type:
+                            internal_name = get_collection_name(agent_type)
+                            # Convert to PascalCase for Weaviate
+                            if internal_name:
+                                # Convert "competitors_corpus" -> "Competitors_corpus"
+                                parts = internal_name.split("_")
+                                weaviate_collection = "_".join(
+                                    part.capitalize() for part in parts
+                                )
                 
                 # Use QueryAgent search() method
                 # QueryAgent handles natural language to Weaviate query conversion
-                search_params = {"query": query, "limit": top_k}
+                # QueryAgent requires collection names to be specified as a list
                 if weaviate_collection:
-                    # Note: QueryAgent may handle collection routing automatically
-                    # But we can pass it as context if needed
-                    pass
-                
-                results = self.query_agent_retriever.search(**search_params)
+                    # Pass collection name as a list
+                    results = self.query_agent_retriever.search(
+                        query=query,
+                        limit=top_k,
+                        collections=[weaviate_collection]
+                    )
+                else:
+                    # If no collection specified, search all available collections
+                    # List of all Weaviate collections we have
+                    all_collections = [
+                        "Competitors_corpus",
+                        "Marketing_corpus",
+                        "Ip_policy_corpus",
+                        "Policy_corpus",
+                        "Job_roles_corpus",
+                        "Pitch_examples_corpus"
+                    ]
+                    logger.info(f"No specific collection specified, searching all collections: {all_collections}")
+                    results = self.query_agent_retriever.search(
+                        query=query,
+                        limit=top_k,
+                        collections=all_collections
+                    )
                 
                 # Format QueryAgent response to match expected format
                 context_parts = []
                 sources = []
                 
-                # QueryAgent.search() returns objects with properties
-                if hasattr(results, 'objects') and results.objects:
-                    for obj in results.objects:
+                # QueryAgent.search() may return results in different formats
+                # Handle: list, objects attribute, or direct iteration
+                objects_to_process = []
+                
+                if isinstance(results, list):
+                    objects_to_process = results
+                elif hasattr(results, 'objects') and results.objects:
+                    objects_to_process = results.objects
+                elif hasattr(results, '__iter__'):
+                    objects_to_process = list(results)
+                else:
+                    logger.debug(f"QueryAgent returned unexpected format: {type(results)}")
+                    logger.debug(f"Results value: {results}")
+                
+                if objects_to_process:
+                    for obj in objects_to_process:
                         # Extract text content from object properties
                         text = ""
+                        properties = {}
+                        
+                        # Handle different object formats
                         if hasattr(obj, 'properties'):
-                            # Try common property names for text content
-                            text = (
-                                obj.properties.get("content", "") or
-                                obj.properties.get("text", "") or
-                                obj.properties.get("body", "") or
-                                str(obj.properties.get("description", ""))
-                            )
-                        
-                        if not text:
-                            # If no text property, use all properties as text
-                            text = str(obj.properties) if hasattr(obj, 'properties') else str(obj)
-                        
-                        context_parts.append(text)
-                        
-                        # Extract metadata
-                        metadata = obj.properties if hasattr(obj, 'properties') else {}
-                        similarity = getattr(obj, 'certainty', getattr(obj, 'distance', 0.0))
-                        if hasattr(similarity, '__float__'):
-                            # If distance, convert to similarity (higher is better)
-                            similarity_float = float(similarity)
-                            if similarity_float > 1.0:
-                                similarity_float = 1.0 / (1.0 + similarity_float)  # Distance to similarity
+                            properties = obj.properties if isinstance(obj.properties, dict) else {}
+                        elif isinstance(obj, dict):
+                            properties = obj
                         else:
-                            similarity_float = 0.0
+                            properties = {}
                         
-                        obj_id = str(getattr(obj, 'uuid', getattr(obj, 'id', '')))
+                        # Try common property names for text content
+                        text = (
+                            properties.get("content", "") or
+                            properties.get("text", "") or
+                            properties.get("body", "") or
+                            str(properties.get("description", ""))
+                        )
                         
-                        sources.append({
-                            "source": metadata.get("source", metadata.get("url", "Weaviate")),
-                            "title": metadata.get("title", metadata.get("name", "")),
-                            "text": text[:200] + "..." if len(text) > 200 else text,
-                            "similarity": similarity_float,
-                            "metadata": metadata,
-                            "id": obj_id
-                        })
+                        if not text and properties:
+                            # If no text property, use all properties as text
+                            text = str(properties)
+                        
+                        if text:
+                            context_parts.append(text)
+                            
+                            # Extract metadata
+                            metadata = properties
+                            similarity = getattr(obj, 'certainty', getattr(obj, 'distance', getattr(obj, 'score', 0.0)))
+                            if hasattr(similarity, '__float__'):
+                                # If distance, convert to similarity (higher is better)
+                                similarity_float = float(similarity)
+                                if similarity_float > 1.0:
+                                    similarity_float = 1.0 / (1.0 + similarity_float)  # Distance to similarity
+                            else:
+                                similarity_float = 0.0
+                            
+                            obj_id = str(getattr(obj, 'uuid', getattr(obj, 'id', properties.get('chunk_id', ''))))
+                            
+                            sources.append({
+                                "source": metadata.get("source", metadata.get("url", "Weaviate")),
+                                "title": metadata.get("title", metadata.get("name", "")),
+                                "text": text[:200] + "..." if len(text) > 200 else text,
+                                "similarity": similarity_float,
+                                "metadata": metadata,
+                                "id": obj_id
+                            })
                     
-                    logger.debug(f"QueryAgent retrieved {len(sources)} documents")
+                    logger.info(f"✅ QueryAgent retrieved {len(sources)} documents from Weaviate")
                     
                     return {
                         "context": "\n\n".join(context_parts),
@@ -261,14 +369,37 @@ class Retriever:
                         "count": len(sources)
                     }
                 else:
-                    logger.warning("QueryAgent returned no results, falling back to PostgreSQL")
+                    logger.info(f"ℹ️  QueryAgent returned no results for query: {query[:50]}...")
+                    # Return empty results instead of falling back to PostgreSQL
+                    return {
+                        "context": "",
+                        "sources": [],
+                        "count": 0
+                    }
             
             except Exception as e:
-                logger.warning(f"QueryAgent search failed: {e}, falling back to PostgreSQL RAG")
-                # Fall through to PostgreSQL fallback
+                logger.warning(f"QueryAgent search failed: {e}")
+                import traceback
+                logger.debug(traceback.format_exc())
+                # Return empty results instead of falling back to PostgreSQL when using Weaviate
+                return {
+                    "context": "",
+                    "sources": [],
+                    "count": 0
+                }
         
-        # Fallback to PostgreSQL RAG (existing implementation)
-        return self._retrieve_with_postgresql(query, top_k, category_filter)
+        # Only fallback to PostgreSQL if QueryAgent is not enabled
+        if not self.use_query_agent:
+            logger.debug("🔍 Using PostgreSQL RAG (Weaviate QueryAgent not enabled)")
+            return self._retrieve_with_postgresql(query, top_k, category_filter)
+        else:
+            # QueryAgent is enabled but something went wrong - return empty instead of PostgreSQL
+            logger.warning("QueryAgent enabled but not available, returning empty results")
+            return {
+                "context": "",
+                "sources": [],
+                "count": 0
+            }
     
     def _retrieve_with_postgresql(
         self,
@@ -367,5 +498,19 @@ class Retriever:
             })
         
         return documents
+    
+    def close(self):
+        """
+        Close Weaviate connection to prevent resource warnings.
+        Should be called when done using the retriever.
+        """
+        if self.weaviate_client:
+            try:
+                self.weaviate_client.close()
+                logger.debug("✅ Weaviate connection closed")
+            except Exception as e:
+                logger.warning(f"Error closing Weaviate connection: {e}")
+            finally:
+                self.weaviate_client = None
 
 

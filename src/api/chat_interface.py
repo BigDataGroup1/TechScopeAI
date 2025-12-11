@@ -637,6 +637,48 @@ def main():
             st.error(f"❌ Status check failed")
             st.caption(f"   {str(e)[:60]}...")
         
+        # Weaviate QueryAgent Status
+        st.markdown("---")
+        st.subheader("🔍 RAG Data Source")
+        try:
+            use_weaviate = os.getenv("USE_WEAVIATE_QUERY_AGENT", "false").lower() in ("true", "1", "yes")
+            weaviate_url = os.getenv("WEAVIATE_URL", "")
+            weaviate_key = os.getenv("WEAVIATE_API_KEY", "")
+            
+            if use_weaviate and weaviate_url and weaviate_key:
+                st.success("✅ **Weaviate QueryAgent** (Active)")
+                # Show shortened URL
+                url_display = weaviate_url[:30] + "..." if len(weaviate_url) > 30 else weaviate_url
+                st.caption(f"📍 {url_display}")
+                st.caption("💡 All RAG queries use Weaviate")
+                
+                # Test connection by creating a test retriever
+                try:
+                    from src.rag.embedder import Embedder
+                    from src.rag.vector_store import VectorStore
+                    from src.rag.retriever import Retriever
+                    embedder = Embedder(use_openai=False)
+                    embedding_model = embedder.get_embedding_model()
+                    test_vector_store = VectorStore(embedding_model=embedding_model)
+                    test_retriever = Retriever(vector_store=test_vector_store, embedder=embedder)
+                    
+                    if test_retriever.use_query_agent and test_retriever.query_agent_retriever:
+                        st.caption("✅ QueryAgent initialized")
+                        # Clean up
+                        test_retriever.close()
+                    else:
+                        st.warning("⚠️ QueryAgent not initialized")
+                except Exception as e:
+                    st.caption(f"⚠️ Connection test: {str(e)[:40]}...")
+            else:
+                st.info("ℹ️ **PostgreSQL RAG** (Fallback)")
+                if not use_weaviate:
+                    st.caption("💡 Set USE_WEAVIATE_QUERY_AGENT=true to use Weaviate")
+                elif not weaviate_url or not weaviate_key:
+                    st.caption("⚠️ Weaviate credentials missing")
+        except Exception as e:
+            st.caption(f"⚠️ Status check: {str(e)[:40]}...")
+        
         # Supervisor toggle (for debugging)
         st.markdown("---")
         st.subheader("⚙️ Settings")

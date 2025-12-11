@@ -174,11 +174,15 @@ class BaseAgent(ABC):
         Args:
             query: Search query
             top_k: Number of documents to retrieve
-            category_filter: Optional category filter
+            category_filter: Optional category filter (defaults to agent's category)
         
         Returns:
             Dictionary with context and sources
         """
+        # Use agent's category if no filter specified
+        if category_filter is None:
+            category_filter = self.category
+        
         return self.retriever.retrieve_with_context(query, top_k=top_k, category_filter=category_filter)
     
     def _extract_company_data(self, context: Optional[Dict] = None) -> Optional[Dict]:
