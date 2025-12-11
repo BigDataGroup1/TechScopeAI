@@ -30,7 +30,8 @@ class VectorStore:
         database_url: Optional[str] = None,
         embedding_model: Optional[EmbeddingModel] = None,
         pool_size: int = 5,
-        use_local: bool = False
+        use_local: bool = False,
+        skip_connection: bool = None  # Auto-detect based on USE_WEAVIATE_QUERY_AGENT
     ):
         """
         Initialize the vector store.
@@ -42,16 +43,29 @@ class VectorStore:
             use_local: If True, use local PostgreSQL (localhost:5432). 
                       If False (default), use Cloud SQL via CLOUD_SQL_PASSWORD.
                       Ignored if database_url is provided.
+            skip_connection: If True, skip PostgreSQL connection entirely.
+                           If None (default), auto-detect based on USE_WEAVIATE_QUERY_AGENT env var.
         """
         self.embedding_model = embedding_model
+        self.pool = None
+        
+        # Auto-detect: skip PostgreSQL if Weaviate QueryAgent is enabled
+        if skip_connection is None:
+            use_weaviate = os.getenv("USE_WEAVIATE_QUERY_AGENT", "false").lower() in ("true", "1", "yes")
+            skip_connection = use_weaviate
+        
+        if skip_connection:
+            logger.info("📦 VectorStore: Skipping PostgreSQL connection (Weaviate is primary)")
+            self.database_url = None
+            return
         
         # Get database URL - defaults to Cloud SQL unless use_local=True
         self.database_url = get_database_url(use_local=use_local, database_url=database_url)
         
         # Initialize connection pool
         try:
-            # Test connection first with a simple connection
-            test_conn = psycopg2.connect(self.database_url, connect_timeout=5)
+            # Test connection first with a simple connection (reduced timeout)
+            test_conn = psycopg2.connect(self.database_url, connect_timeout=2)
             test_conn.close()
             
             # If test succeeds, create pool

@@ -7,6 +7,7 @@ __pycache__/
 *.so
 data/
 exports/
+node_modules/
 # Distribution / packaging
 .Python
 build/
