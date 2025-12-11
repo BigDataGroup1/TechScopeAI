@@ -289,24 +289,6 @@ const PolicyPage: React.FC = () => {
           <div className="canva-card p-8 h-fit sticky top-24">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-slate-800">Generated Document</h2>
-              {result && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={copyToClipboard}
-                    className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm"
-                  >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
-                  <button
-                    onClick={downloadAsText}
-                    className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm"
-                  >
-                    <Download size={14} />
-                    Download
-                  </button>
-                </div>
-              )}
             </div>
 
             {!result && !isLoading && (
@@ -331,6 +313,35 @@ const PolicyPage: React.FC = () => {
 
             {result && (
               <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const text = result.response || result.content || '';
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-indigo-100 text-indigo-700 text-sm font-medium hover:bg-indigo-200"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      const text = result.response || result.content || '';
+                      const blob = new Blob([text], { type: 'text/plain' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${formData.policy_type}_policy.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      window.URL.revokeObjectURL(url);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200"
+                  >
+                    Download
+                  </button>
+                </div>
+
                 <div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl p-6 border border-indigo-100 max-h-[600px] overflow-y-auto">
                   <ContentRenderer content={result.response || result.content} accentColor="indigo" />
                 </div>

@@ -59,7 +59,7 @@ const CompetitivePage: React.FC = () => {
         description: `Analyzed ${competitors?.length || 'market'} competitors`,
         timestamp: new Date().toISOString(),
         type: 'competitive',
-        content: response.response,
+        content: response.analysis || response.response,
         toolUsed: 'Competitive Analysis Agent',
       });
     } catch (err: any) {
@@ -250,8 +250,37 @@ const CompetitivePage: React.FC = () => {
 
             {result && (
               <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const text = result.analysis || result.response || '';
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-indigo-100 text-indigo-700 text-sm font-medium hover:bg-indigo-200"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      const text = result.analysis || result.response || '';
+                      const blob = new Blob([text], { type: 'text/plain' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'competitive_analysis.txt';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      window.URL.revokeObjectURL(url);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200"
+                  >
+                    Download
+                  </button>
+                </div>
+
                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100 max-h-[600px] overflow-y-auto">
-                  <ContentRenderer content={result.response} accentColor="indigo" />
+                  <ContentRenderer content={result.analysis || result.response} accentColor="indigo" />
                 </div>
 
                 {result.sources && result.sources.length > 0 && (

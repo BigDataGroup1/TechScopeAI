@@ -310,6 +310,35 @@ const TeamAnalysisPage: React.FC = () => {
 
             {result && (
               <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const text = result.analysis || result.response || '';
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium hover:bg-purple-200"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      const text = result.analysis || result.response || '';
+                      const blob = new Blob([text], { type: 'text/plain' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'team_analysis.txt';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      window.URL.revokeObjectURL(url);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200"
+                  >
+                    Download
+                  </button>
+                </div>
+
                 <div className="max-h-[700px] overflow-y-auto pr-2">
                   <ContentRenderer content={result.analysis || result.response} accentColor="purple" />
                 </div>

@@ -37,31 +37,37 @@ async def generate_policy(
             "additional_requirements": request.additional_requirements
         }
         
+        # Normalize policy type (UI may send lowercase ids)
+        pt_raw = request.policy_type or ""
+        pt = pt_raw.lower().strip()
+
         # Generate based on policy type
-        if request.policy_type == "Privacy Policy":
+        if pt in ("privacy policy", "privacy"):
             result = agent.generate_privacy_policy(context)
-        elif request.policy_type == "Terms of Service":
+        elif pt in ("terms of service", "terms"):
             result = agent.generate_terms_of_service(context)
-        elif request.policy_type == "Both":
+        elif pt in ("both", "privacy+terms"):
             pp_result = agent.generate_privacy_policy(context)
             tos_result = agent.generate_terms_of_service(context)
             result = {
                 "response": f"# Privacy Policy\n\n{pp_result.get('response', '')}\n\n---\n\n# Terms of Service\n\n{tos_result.get('response', '')}",
-                "sources": pp_result.get("sources", []) + tos_result.get("sources", [])
+                "sources": (pp_result.get("sources", []) or []) + (tos_result.get("sources", []) or [])
             }
         else:
-            raise HTTPException(status_code=400, detail="Invalid policy type")
+            # For unsupported types (e.g., cookies/refund/HR), provide a generic policy doc via process_query
+            query = f"Generate a comprehensive {pt_raw or 'policy'} for this company with additional requirements: {request.additional_requirements or 'N/A'}"
+            result = agent.process_query(query, context)
         
         add_activity(
             x_session_id,
-            request.policy_type,
+            pt_raw or "Policy",
             "Generated policy document",
             "policy"
         )
         
         return PolicyResponse(
             success=True,
-            policy_type=request.policy_type,
+            policy_type=pt_raw or "Policy",
             content=result.get("response", ""),
             sources=result.get("sources")
         )
@@ -105,5 +111,7 @@ async def check_compliance(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 

@@ -55,7 +55,7 @@ async def assess_patentability(
         
         return PatentAssessmentResponse(
             success=True,
-            assessment=result.get("response", ""),
+            assessment=result.get("assessment") or result.get("response", ""),
             patentability_score=result.get("score"),
             sources=result.get("sources")
         )
@@ -100,7 +100,7 @@ async def get_filing_strategy(
         
         return FilingStrategyResponse(
             success=True,
-            strategy=result.get("response", ""),
+            strategy=result.get("strategy") or result.get("response", ""),
             recommended_jurisdictions=request.geographic_interest,
             estimated_cost=request.budget_range,
             sources=result.get("sources")
@@ -146,5 +146,7 @@ async def search_patents(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 

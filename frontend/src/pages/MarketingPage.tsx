@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../store/AppContext';
 import { marketingApi } from '../services/api';
-import { ArrowLeft, Sparkles, Image, Instagram, Linkedin, Download } from 'lucide-react';
+import { ArrowLeft, Sparkles, Image, Instagram, Linkedin, Download, ExternalLink } from 'lucide-react';
 import ContentRenderer from '../components/ContentRenderer';
 
 const platformOptions = ['Instagram', 'LinkedIn', 'Both'];
@@ -21,6 +21,7 @@ const MarketingPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     platform: 'Instagram',
@@ -38,6 +39,7 @@ const MarketingPage: React.FC = () => {
     setIsLoading(true);
     setError('');
     setResult(null);
+    setImagePreviewUrl(null);
     
     try {
       const response = await marketingApi.generateContent({
@@ -49,6 +51,12 @@ const MarketingPage: React.FC = () => {
         image_provider: 'openai',
       });
       setResult(response);
+
+      // Load image preview with auth header if an image was generated
+      if (response.image_path || response.image_url) {
+        await loadImagePreview(response);
+      }
+
       addActivity({
         id: Date.now().toString(),
         title: 'Marketing Content Created',
@@ -62,6 +70,79 @@ const MarketingPage: React.FC = () => {
       setError(err.response?.data?.detail || err.message || 'Failed to generate content');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Prefer backend-served image to avoid CORS; use image_url only as a manual link
+  const getBackendImageUrl = (res?: any) => {
+    const r = res || result;
+    if (r?.image_path) {
+      const encoded = encodeURIComponent(r.image_path);
+      return `http://localhost:8000/api/marketing/image?path=${encoded}`;
+    }
+    return null;
+  };
+
+  const loadImagePreview = async (res?: any) => {
+    const imageUrl = getBackendImageUrl(res);
+    if (!imageUrl) {
+      // If only external URL exists (e.g., OpenAI blob), don't try to fetch (CORS). Show link instead.
+      setImagePreviewUrl(null);
+      return;
+    }
+    const sessionId = localStorage.getItem('sessionId') || '';
+    if (!sessionId) {
+      setError('Session expired. Please login/register again to view the image.');
+      return;
+    }
+    try {
+      const response = await fetch(imageUrl, {
+        headers: { 'X-Session-ID': sessionId },
+      });
+      if (!response.ok) throw new Error('Failed to load image');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      setImagePreviewUrl(url);
+    } catch (err: any) {
+      setError('Could not load image. ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    const imageUrl = getBackendImageUrl();
+    if (!imageUrl) {
+      // If only external image_url exists, open in new tab as a fallback
+      if (result?.image_url) {
+        window.open(result.image_url, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+    try {
+      const filename =
+        (result?.image_path && result.image_path.split('/').pop()) ||
+        'marketing_image.png';
+      const sessionId = localStorage.getItem('sessionId') || '';
+      if (!sessionId) {
+        setError('Session expired. Please login/register again to download the image.');
+        return;
+      }
+      const response = await fetch(imageUrl, {
+        headers: {
+          'X-Session-ID': sessionId,
+        },
+      });
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      setError('Failed to download image: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -284,29 +365,75 @@ const MarketingPage: React.FC = () => {
             {result && (
               <div className="space-y-6">
                 {/* Generated Image */}
-                {result.image_path && (
+                {(imagePreviewUrl || result?.image_url) && (
                   <div className="image-preview">
-                    <img
-                      src={`http://localhost:8000${result.image_path}`}
-                      alt="Generated marketing image"
-                      className="w-full rounded-lg"
-                    />
-                    <div className="p-4 bg-slate-50 flex justify-between items-center">
-                      <span className="text-sm text-slate-500">AI Generated Image</span>
-                      <a
-                        href={`http://localhost:8000${result.image_path}`}
-                        download
-                        className="flex items-center gap-2 text-purple-600 hover:text-purple-800"
-                      >
-                        <Download size={16} />
-                        Download
-                      </a>
-                    </div>
+                    {imagePreviewUrl ? (
+                      <>
+                        <img
+                          src={imagePreviewUrl}
+                          alt="Generated marketing image"
+                          className="w-full rounded-lg"
+                        />
+                        <div className="p-4 bg-slate-50 flex justify-between items-center">
+                          <span className="text-sm text-slate-500">AI Generated Image</span>
+                          <button
+                            onClick={handleDownloadImage}
+                            className="flex items-center gap-2 text-purple-600 hover:text-purple-800"
+                          >
+                            <Download size={16} />
+                            Download
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-4 bg-slate-50 rounded-lg flex items-center justify-between">
+                        <div className="text-sm text-slate-600">
+                          Image hosted externally. Open in new tab to view/download.
+                        </div>
+                        <a
+                          href={result?.image_url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-purple-600 hover:text-purple-800"
+                        >
+                          <ExternalLink size={16} />
+                          Open Image
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Content Text */}
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100">
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100 space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        const text = result.response || result.content || '';
+                        navigator.clipboard.writeText(text);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium hover:bg-purple-200"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      onClick={() => {
+                        const text = result.response || result.content || '';
+                        const blob = new Blob([text], { type: 'text/plain' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${formData.platform}_post.txt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200"
+                    >
+                      Download
+                    </button>
+                  </div>
                   <h3 className="font-semibold text-slate-800 mb-3">
                     {formData.platform} Post
                   </h3>

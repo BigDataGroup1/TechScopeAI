@@ -3,6 +3,8 @@ Marketing Agent Routes
 """
 
 from fastapi import APIRouter, HTTPException, Header
+from fastapi.responses import FileResponse
+from pathlib import Path
 from backend.models.schemas import (
     MarketingContentRequest, MarketingContentResponse, ErrorResponse
 )
@@ -74,6 +76,37 @@ async def generate_marketing_content(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/image")
+async def get_marketing_image(path: str, x_session_id: str = Header(...)):
+    """
+    Serve generated marketing images stored in exports/.
+    Accepts a relative path like 'exports/gemini_images/abc.png'.
+    """
+    if not validate_session(x_session_id):
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    try:
+        # Normalize path to prevent directory traversal
+        rel_path = path.lstrip("/\\")
+        file_path = Path(rel_path)
+        # Resolve to absolute path
+        abs_path = (Path.cwd() / file_path).resolve()
+        exports_dir = (Path.cwd() / "exports").resolve()
+        if exports_dir not in abs_path.parents and abs_path != exports_dir:
+            raise HTTPException(status_code=400, detail="Invalid path")
+        if not abs_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return FileResponse(
+            path=str(abs_path),
+            filename=abs_path.name,
+            media_type="image/png"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/strategies")
 async def get_marketing_strategies(
     x_session_id: str = Header(...)
@@ -109,5 +142,7 @@ async def get_marketing_strategies(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 

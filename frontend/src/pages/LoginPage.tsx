@@ -19,6 +19,11 @@ const LoginPage: React.FC = () => {
     traction: '',
     funding_goal: '',
   });
+  const [consents, setConsents] = useState({
+    data_sharing: false,
+    tos: false,
+    privacy: false,
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -202,10 +207,53 @@ const LoginPage: React.FC = () => {
               </div>
             )}
 
+            {/* Consents */}
+            <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <label className="flex items-start gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={consents.data_sharing}
+                  onChange={(e) => setConsents({ ...consents, data_sharing: e.target.checked })}
+                  className="mt-1 h-4 w-4"
+                  required
+                />
+                <span>I consent to data sharing for improving the service *</span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={consents.tos}
+                  onChange={(e) => setConsents({ ...consents, tos: e.target.checked })}
+                  className="mt-1 h-4 w-4"
+                  required
+                />
+                <span>I accept the Terms of Service *</span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={consents.privacy}
+                  onChange={(e) => setConsents({ ...consents, privacy: e.target.checked })}
+                  className="mt-1 h-4 w-4"
+                  required
+                />
+                <span>I accept the Privacy Policy *</span>
+              </label>
+            </div>
+
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading || !formData.company_name || !formData.industry || !formData.problem || !formData.solution}
+              disabled={
+                isLoading ||
+                !formData.company_name ||
+                !formData.industry ||
+                !formData.problem ||
+                !formData.solution ||
+                !consents.data_sharing ||
+                !consents.tos ||
+                !consents.privacy
+              }
               className="w-full canva-btn py-4 text-lg flex items-center justify-center gap-2"
             >
               {isLoading ? (

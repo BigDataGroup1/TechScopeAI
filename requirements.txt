@@ -17,6 +17,12 @@ newspaper3k>=0.2.8  # Article extraction
 lxml>=4.9.3  # XML/HTML parser
 python-dotenv>=1.0.0  # Environment variables
 
+# API & Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.23.2
+pydantic>=2.6.0
+python-multipart>=0.0.6
+
 # RAG & Vector Database
 sentence-transformers>=2.2.0  # FREE embeddings
 faiss-cpu>=1.7.4  # Vector database (local, free - fallback)

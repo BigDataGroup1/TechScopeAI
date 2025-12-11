@@ -82,7 +82,7 @@ const PatentPage: React.FC = () => {
         description: 'Analysis complete',
         timestamp: new Date().toISOString(),
         type: 'patent',
-        content: response.response,
+        content: response.assessment || response.response,
         toolUsed: 'Patent Assessment Agent',
       });
     } catch (err: any) {
@@ -112,7 +112,7 @@ const PatentPage: React.FC = () => {
         description: 'Recommendations ready',
         timestamp: new Date().toISOString(),
         type: 'patent',
-        content: response.response,
+        content: response.strategy || response.response,
         toolUsed: 'Patent Filing Strategy Agent',
       });
     } catch (err: any) {
@@ -373,8 +373,37 @@ const PatentPage: React.FC = () => {
 
             {result && (
               <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const text = result.assessment || result.strategy || result.response || '';
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-teal-100 text-teal-700 text-sm font-medium hover:bg-teal-200"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      const text = result.assessment || result.strategy || result.response || '';
+                      const blob = new Blob([text], { type: 'text/plain' });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'patent_analysis.txt';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      window.URL.revokeObjectURL(url);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200"
+                  >
+                    Download
+                  </button>
+                </div>
+
                 <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-xl p-6 border border-teal-100 max-h-[600px] overflow-y-auto">
-                  <ContentRenderer content={result.response} accentColor="teal" />
+                  <ContentRenderer content={result.assessment || result.strategy || result.response} accentColor="teal" />
                 </div>
 
                 {result.sources && result.sources.length > 0 && (
