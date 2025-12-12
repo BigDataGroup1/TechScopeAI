@@ -201,8 +201,8 @@ TechScopeAI/
 | **Name** | **Contribution** |
 |----------|------------------|
 | Tapas Desai | 33.3% - Frontend Development, FastAPI backend, Cloud Run Deployment, |
-| Aksh Ashish Talati | 33.3% - AI Agents Implementation, Weaviate Cloud , Cloud run deployment |
-| Swathi Jinka Radhakrishna | 33.3% - RAG Pipeline, Weaviate cloud ,MCP integration, Cloud Run Deployment |
+| Aksh Ashish Talati | 33.3% - AI Agents Implementation, Weaviate Cloud , Cloud run deployment , Backend |
+| Swathi Jinka Radhakrishna | 33.3% - RAG Pipeline, Weaviate cloud ,MCP integration, Cloud Run Deployment, Backend |
 
 ---
 
