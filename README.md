@@ -46,10 +46,10 @@ TechScopeAI is an AI-powered platform that helps technical startup founders with
 
 
 
-TechScopeAI combines specialized knowledge, real-time data access, and multi-agent orchestration to provide technical startup founders with actionable, domain-specific guidance across all critical business areas.
+##TechScopeAI combines specialized knowledge, real-time data access, and multi-agent orchestration to provide technical startup founders with actionable, domain-specific guidance across all critical business areas.
 ---
 
-## 🌐 Live Demo
+## 🌐 Application link
 
 ### 👉 https://techscopeai-web-541402991388.us-central1.run.app/
 
@@ -60,6 +60,8 @@ TechScopeAI combines specialized knowledge, real-time data access, and multi-age
 | Resource | Link |
 |----------|------|
 | **Live Application** | [TechScopeAI Web App](https://techscopeai-web-541402991388.us-central1.run.app/) |
+| **Full demo video with explanation** | [Full Video]((https://youtu.be/QxWz4NmnLkU)) |
+| **Application demo video** | [Application demo](([https://youtu.be/QxWz4NmnLkU](https://youtu.be/DdfLardLPjM))) |
 | **GitHub Repository** | [BigDataGroup1/TechScopeAI](https://github.com/BigDataGroup1/TechScopeAI) |
 | **Google Codelab** | [Project Documentation](#) |
 | **Architecture Diagram** | [View on Eraser.io](https://app.eraser.io/workspace/oAEPgjs5TnrFlUA3olc2?origin=share) |
@@ -200,7 +202,7 @@ TechScopeAI/
 
 | **Name** | **Contribution** |
 |----------|------------------|
-| Tapas Desai | 33.3% - Frontend Development, FastAPI backend, Cloud Run Deployment, |
+| Tapas Desai | 33.3% - Frontend Development, FastAPI backend, Cloud Run Deployment |
 | Aksh Ashish Talati | 33.3% - AI Agents Implementation, Weaviate Cloud , Cloud run deployment , Backend |
 | Swathi Jinka Radhakrishna | 33.3% - RAG Pipeline, Weaviate cloud ,MCP integration, Cloud Run Deployment, Backend |
 
