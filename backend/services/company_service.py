@@ -47,12 +47,21 @@ def create_company(data: Dict[str, Any]) -> Dict[str, Any]:
         json.dump(company, f, indent=2)
     
     # Create session
-    _sessions[session_id] = {
+    session_data = {
         "company_id": company_id,
         "company": company,
         "activities": [],
         "created_at": datetime.utcnow().isoformat()
     }
+    _sessions[session_id] = session_data
+    
+    # Save session to file for Cloud Run stateless recovery
+    session_file = COMPANIES_PATH / f"session_{session_id}.json"
+    try:
+        with open(session_file, 'w') as f:
+            json.dump(session_data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save session file: {e}")
     
     logger.info(f"✅ Created company: {company['company_name']} ({company_id})")
     
@@ -77,9 +86,27 @@ def get_company(company_id: str) -> Optional[Dict[str, Any]]:
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     """
-    Get session by ID
+    Get session by ID.
+    For Cloud Run stateless deployments, also check session file if not in memory.
     """
-    return _sessions.get(session_id)
+    # Check in-memory first
+    if session_id in _sessions:
+        return _sessions[session_id]
+    
+    # Try to recover session from file (for stateless Cloud Run)
+    session_file = COMPANIES_PATH / f"session_{session_id}.json"
+    if session_file.exists():
+        try:
+            with open(session_file, 'r') as f:
+                session_data = json.load(f)
+                # Restore to memory
+                _sessions[session_id] = session_data
+                logger.info(f"✅ Restored session from file: {session_id[:8]}...")
+                return session_data
+        except Exception as e:
+            logger.warning(f"Failed to restore session: {e}")
+    
+    return None
 
 
 def get_company_from_session(session_id: str) -> Optional[Dict[str, Any]]:
@@ -96,7 +123,8 @@ def add_activity(session_id: str, title: str, description: str, activity_type: s
     """
     Add an activity to the session
     """
-    session = _sessions.get(session_id)
+    # Use get_session to load from file if needed
+    session = get_session(session_id)
     if not session:
         return None
     
@@ -114,6 +142,14 @@ def add_activity(session_id: str, title: str, description: str, activity_type: s
     # Keep only last 50 activities
     session["activities"] = session["activities"][:50]
     
+    # Persist session to file for Cloud Run stateless recovery
+    session_file = COMPANIES_PATH / f"session_{session_id}.json"
+    try:
+        with open(session_file, 'w') as f:
+            json.dump(session, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to persist session activity: {e}")
+    
     return activity
 
 
@@ -121,7 +157,8 @@ def get_activities(session_id: str, limit: int = 20) -> list:
     """
     Get activities for a session
     """
-    session = _sessions.get(session_id)
+    # Use get_session to load from file if needed
+    session = get_session(session_id)
     if not session:
         return []
     
@@ -130,19 +167,36 @@ def get_activities(session_id: str, limit: int = 20) -> list:
 
 def validate_session(session_id: str) -> bool:
     """
-    Check if session is valid
+    Check if session is valid (also checks file for Cloud Run stateless recovery)
     """
-    return session_id in _sessions
+    if session_id in _sessions:
+        return True
+    # Try to recover from file
+    session = get_session(session_id)
+    return session is not None
 
 
 def delete_session(session_id: str) -> bool:
     """
-    Delete/logout session
+    Delete/logout session (both in-memory and file)
     """
+    deleted = False
+    
+    # Delete from memory
     if session_id in _sessions:
         del _sessions[session_id]
-        return True
-    return False
+        deleted = True
+    
+    # Delete session file for Cloud Run
+    session_file = COMPANIES_PATH / f"session_{session_id}.json"
+    if session_file.exists():
+        try:
+            session_file.unlink()
+            deleted = True
+        except Exception as e:
+            logger.warning(f"Failed to delete session file: {e}")
+    
+    return deleted
 
 
 
