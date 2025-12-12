@@ -44,13 +44,7 @@ TechScopeAI is an AI-powered platform that helps technical startup founders with
 - **Team Planning**: Job descriptions and team structure recommendations
 
 
-## Key Features
 
-- ✅ **Domain-Specific Knowledge**: RAG system with startup-focused datasets
-- ✅ **Real-Time Data**: MCP tools for current information
-- ✅ **Multi-Agent System**: Specialized agents for different domains
-- ✅ **Production-Ready**: Cloud-native deployment with scalability
-- ✅ **Visual Outputs**: Gamma.ai integration for professional presentations with automatic image enhancement
 
 TechScopeAI combines specialized knowledge, real-time data access, and multi-agent orchestration to provide technical startup founders with actionable, domain-specific guidance across all critical business areas.
 ---
@@ -99,7 +93,7 @@ TechScopeAI combines specialized knowledge, real-time data access, and multi-age
 
 | Feature | Description |
 |---------|-------------|
-| 🎯 **Pitch Agent** | Generate pitch decks, elevator pitches, and investor-ready presentations |
+| 🎯 **Pitch Agent** | Generate pitch decks, elevator pitches, and investor-ready presentations and gamma ppt  |
 | 📊 **Competitive Agent** | Analyze competitors and market positioning |
 | 📱 **Marketing Agent** | Create marketing content and growth strategies |
 | 💡 **Patent Agent** | Assess patentability and IP strategy |
