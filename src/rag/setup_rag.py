@@ -211,9 +211,14 @@ def index_collection_worker(args_tuple: Tuple) -> Tuple[str, bool, Optional[str]
     
     # Create a separate VectorStore instance for each thread (thread-safe)
     # Note: EmbeddingModel is shared, but sentence-transformers is thread-safe
+    use_local = False
+    if database_url and 'localhost:5432' in database_url:
+        use_local = True
+    
     vector_store = VectorStore(
         database_url=database_url,
-        embedding_model=embedding_model
+        embedding_model=embedding_model,
+        use_local=use_local
     )
     
     try:
@@ -293,10 +298,16 @@ def main():
     # Initialize a temporary vector store for reset/check operations
     logger.info(f"\nInitializing PostgreSQL + pgvector...")
     # Get database URL from argument, environment, or use default
-    database_url = getattr(args, 'database_url', None) or os.getenv("DATABASE_URL")
+    # Defaults to Cloud SQL unless --database-url is explicitly set to local
+    database_url = getattr(args, 'database_url', None)
+    use_local = False
+    if database_url and 'localhost:5432' in database_url:
+        use_local = True
+    
     temp_vector_store = VectorStore(
         database_url=database_url,
-        embedding_model=embedding_model
+        embedding_model=embedding_model,
+        use_local=use_local
     )
     
     # Reset if requested
@@ -401,9 +412,14 @@ def main():
     logger.info("\nCollection counts:")
     
     # Use temp_vector_store for final counts
+    use_local = False
+    if database_url and 'localhost:5432' in database_url:
+        use_local = True
+    
     final_vector_store = VectorStore(
         database_url=database_url,
-        embedding_model=embedding_model
+        embedding_model=embedding_model,
+        use_local=use_local
     )
     
     for collection_name in collections_to_index.keys():

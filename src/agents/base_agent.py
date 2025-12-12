@@ -16,24 +16,44 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
-# Try to import PersonalizationAgent
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+# Try to import PersonalizationAgent (Weaviate Agents - separate from RAG)
+# Note: RAG uses PostgreSQL, but agents use Weaviate for personalization
 try:
     import weaviate
-    from weaviate.agents.personalize import PersonalizationAgent
-    PERSONALIZATION_AGENT_AVAILABLE = True
+    try:
+        # Correct import path for weaviate-agents v1.1.0+
+        from weaviate_agents.personalization import PersonalizationAgent
+        PERSONALIZATION_AGENT_AVAILABLE = True
+    except (ImportError, AttributeError) as e:
+        # Weaviate agents not installed or wrong version - agents will work without personalization
+        PERSONALIZATION_AGENT_AVAILABLE = False
 except ImportError:
     PERSONALIZATION_AGENT_AVAILABLE = False
 
 from ..rag.retriever import Retriever
+from ..mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
+
+# Log status after logger is defined
+if PERSONALIZATION_AGENT_AVAILABLE:
+    logger.debug("✅ PersonalizationAgent imported successfully")
+else:
+    logger.warning("Weaviate Agents PersonalizationAgent not available. Agents will work without personalization features.")
 
 
 class BaseAgent(ABC):
     """Base class for all TechScopeAI agents."""
     
     def __init__(self, category: str, retriever: Retriever, 
-                 model: str = "gpt-4-turbo-preview", temperature: float = 0.7):
+                 model: str = "gpt-4-turbo-preview", temperature: float = 0.7,
+                 ai_provider: str = "openai"):
         """
         Initialize base agent.
         
@@ -42,62 +62,70 @@ class BaseAgent(ABC):
             retriever: Retriever instance for RAG
             model: LLM model name
             temperature: LLM temperature
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
         self.category = category
         self.retriever = retriever
         self.model = model
         self.temperature = temperature
+        self.ai_provider = ai_provider.lower()
+        self.original_ai_provider = ai_provider.lower()  # Store original provider for fallback logic
         
-        # Initialize LLM client
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment. Add it to .env file")
+        # Initialize use_gemini flag (default to False)
+        self.use_gemini = False
         
-        if not OPENAI_AVAILABLE:
-            raise ImportError("openai package required. Install with: pip install openai")
+        # Initialize LLM client based on provider
+        if self.ai_provider in ["gemini", "auto"]:
+            # Try Gemini first - reload env vars to ensure latest values
+            load_dotenv()  # Reload to ensure .env is loaded
+            gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            if gemini_key and GEMINI_AVAILABLE:
+                try:
+                    genai.configure(api_key=gemini_key)
+                    # Use appropriate Gemini model
+                    if "gemini" in model.lower():
+                        self.gemini_model = genai.GenerativeModel(model)
+                    else:
+                        # Default Gemini model
+                        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                    self.client = None  # Use Gemini instead of OpenAI
+                    self.use_gemini = True
+                    logger.info(f"✅ Using Gemini for {category} agent")
+                except Exception as e:
+                    logger.warning(f"Could not initialize Gemini: {e}, falling back to OpenAI")
+                    self.use_gemini = False
+                    self.ai_provider = "openai"
+            else:
+                if self.ai_provider == "gemini":
+                    raise ValueError("GEMINI_API_KEY not found and Gemini was explicitly selected. Add it to .env file")
+                logger.warning("GEMINI_API_KEY not found, falling back to OpenAI")
+                self.use_gemini = False
+                self.ai_provider = "openai"
         
-        self.client = OpenAI(api_key=api_key)
+        if not self.use_gemini:
+            # Use OpenAI
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment. Add it to .env file")
+            
+            if not OPENAI_AVAILABLE:
+                raise ImportError("openai package required. Install with: pip install openai")
+            
+            # If model name is a Gemini model, use OpenAI's default model instead
+            if "gemini" in self.model.lower():
+                logger.warning(f"Model '{self.model}' is a Gemini model, but Gemini is not available. Using OpenAI default model instead.")
+                self.model = "gpt-4-turbo-preview"  # Default OpenAI model
+            
+            self.client = OpenAI(api_key=api_key)
+            self.use_gemini = False
+            logger.info(f"✅ Using OpenAI for {category} agent with model: {self.model}")
         
-        # Initialize PersonalizationAgent if available (for Weaviate Cloud)
+        # Initialize MCP client for tools (web search, image search, etc.)
+        self.mcp_client = MCPClient()
+        
+        # PersonalizationAgent disabled - uses gRPC which has issues with API key format
+        # Agents will work without personalization features
         self.personalization_agent = None
-        if PERSONALIZATION_AGENT_AVAILABLE:
-            try:
-                weaviate_url = os.getenv("WEAVIATE_URL", "http://localhost:8081")
-                is_local = "localhost" in weaviate_url or "127.0.0.1" in weaviate_url or not weaviate_url.startswith("https://")
-                
-                if not is_local:
-                    # Only use PersonalizationAgent with Weaviate Cloud
-                    try:
-                        # Connect to Weaviate (reuse retriever's connection if available)
-                        if hasattr(retriever, 'query_agent_retriever') and hasattr(retriever.query_agent_retriever, 'client'):
-                            weaviate_client = retriever.query_agent_retriever.client
-                        else:
-                            # Create new connection
-                            if weaviate_url.startswith("http://"):
-                                url_parts = weaviate_url.replace("http://", "").split(":")
-                                host = url_parts[0]
-                                port = int(url_parts[1]) if len(url_parts) > 1 else 8081
-                                weaviate_client = weaviate.connect_to_custom(
-                                    http_host=host, http_port=port, http_secure=False,
-                                    grpc_host=host, grpc_port=50051, grpc_secure=False
-                                )
-                            else:
-                                url_parts = weaviate_url.replace("https://", "").split(":")
-                                host = url_parts[0]
-                                port = int(url_parts[1]) if len(url_parts) > 1 else 443
-                                weaviate_client = weaviate.connect_to_custom(
-                                    http_host=host, http_port=port, http_secure=True,
-                                    grpc_host=host, grpc_port=50051, grpc_secure=True
-                                )
-                        
-                        self.personalization_agent = PersonalizationAgent(client=weaviate_client)
-                        logger.info(f"✅ PersonalizationAgent initialized for {category} agent")
-                    except Exception as e:
-                        logger.warning(f"Could not initialize PersonalizationAgent: {e}, will use company data for personalization")
-                else:
-                    logger.info(f"PersonalizationAgent requires Weaviate Cloud (local instance detected), will use company data for personalization")
-            except Exception as e:
-                logger.warning(f"PersonalizationAgent not available: {e}, will use company data for personalization")
         
         logger.info(f"Initialized {category} agent with model {model}")
     
@@ -109,12 +137,16 @@ class BaseAgent(ABC):
         Args:
             query: Search query
             top_k: Number of documents to retrieve
-            category_filter: Optional category filter
-            
+            category_filter: Optional category filter (defaults to agent's category)
+        
         Returns:
             Dictionary with context and sources
         """
-        return self.retriever.retrieve_with_context(query, top_k=top_k)
+        # Use agent's category if no filter specified
+        if category_filter is None:
+            category_filter = self.category
+        
+        return self.retriever.retrieve_with_context(query, top_k=top_k, category_filter=category_filter)
     
     def _extract_company_data(self, context: Optional[Dict] = None) -> Optional[Dict]:
         """
@@ -198,6 +230,7 @@ class BaseAgent(ABC):
                          company_data: Optional[Dict] = None) -> str:
         """
         Generate response using LLM with automatic personalization.
+        Supports both OpenAI and Gemini.
         
         Args:
             prompt: User prompt
@@ -207,6 +240,49 @@ class BaseAgent(ABC):
         Returns:
             LLM response text (personalized to the startup)
         """
+        # Personalize the prompt with company data
+        personalized_prompt = self.personalize_prompt(prompt, company_data)
+        
+        # Use Gemini if configured
+        if self.use_gemini and hasattr(self, 'gemini_model'):
+            try:
+                # Enhance system prompt with personalization instructions
+                enhanced_system_prompt = system_prompt or ""
+                if company_data:
+                    company_name = company_data.get('company_name', 'this startup')
+                    enhanced_system_prompt += f"\n\nIMPORTANT: All responses must be personalized specifically for {company_name}. Use the company's specific details, industry, problem, solution, and context provided. Make responses relevant and tailored to this startup's unique situation."
+                
+                # Combine system prompt and user prompt for Gemini
+                full_prompt = f"{enhanced_system_prompt}\n\n{personalized_prompt}" if enhanced_system_prompt else personalized_prompt
+                
+                response = self.gemini_model.generate_content(
+                    full_prompt,
+                    generation_config={
+                        "temperature": self.temperature,
+                    }
+                )
+                return response.text
+            except Exception as e:
+                logger.error(f"Error generating response with Gemini: {e}")
+                # Fallback to OpenAI if Gemini fails and auto mode
+                if self.ai_provider == "auto":
+                    logger.info("Falling back to OpenAI...")
+                    self.use_gemini = False
+                    # If model is Gemini, change to OpenAI model
+                    if "gemini" in self.model.lower():
+                        logger.warning(f"Changing model from '{self.model}' to OpenAI default")
+                        self.model = "gpt-4-turbo-preview"
+                    # Initialize OpenAI client if not already done
+                    if not hasattr(self, 'client') or self.client is None:
+                        api_key = os.getenv("OPENAI_API_KEY")
+                        if api_key and OPENAI_AVAILABLE:
+                            self.client = OpenAI(api_key=api_key)
+                        else:
+                            raise ValueError("Cannot fallback to OpenAI: API key not found")
+                else:
+                    raise
+        
+        # Use OpenAI
         messages = []
         
         # Enhance system prompt with personalization instructions
@@ -218,8 +294,6 @@ class BaseAgent(ABC):
         if enhanced_system_prompt:
             messages.append({"role": "system", "content": enhanced_system_prompt})
         
-        # Personalize the prompt with company data
-        personalized_prompt = self.personalize_prompt(prompt, company_data)
         messages.append({"role": "user", "content": personalized_prompt})
         
         try:
@@ -230,8 +304,80 @@ class BaseAgent(ABC):
             )
             return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            raise
+            error_str = str(e)
+            error_type = type(e).__name__
+            # Check if it's a quota/rate limit error and we're in auto mode
+            # Use original_ai_provider to check, since ai_provider may have been changed to "openai" during init
+            is_quota_error = ("429" in error_str or "quota" in error_str.lower() or 
+                            "rate limit" in error_str.lower() or "insufficient_quota" in error_str.lower() or
+                            "RateLimitError" in error_type)
+            
+            # Always try fallback for quota errors if in auto mode, or if no specific provider was set
+            if (self.original_ai_provider == "auto" or self.ai_provider == "auto" or 
+                not hasattr(self, 'original_ai_provider')) and is_quota_error:
+                logger.warning(f"OpenAI quota exceeded or rate limited: {e}")
+                logger.info("Attempting to fallback to Gemini...")
+                
+                # Try to use Gemini as fallback - reload environment variables
+                from dotenv import load_dotenv
+                load_dotenv()  # Reload to ensure we have latest env vars
+                
+                gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                logger.info(f"GEMINI_API_KEY found: {'YES' if gemini_key else 'NO'}")
+                
+                # Try to import Gemini dynamically (in case it's installed but GEMINI_AVAILABLE wasn't set)
+                gemini_imported = False
+                genai = None
+                try:
+                    import google.generativeai as genai
+                    gemini_imported = True
+                    logger.info("[OK] google-generativeai imported successfully")
+                except ImportError:
+                    logger.warning("[X] google-generativeai not installed. Cannot use Gemini fallback.")
+                    logger.info("Install with: pip install google-generativeai")
+                
+                if gemini_key and gemini_imported:
+                    try:
+                        genai.configure(api_key=gemini_key)
+                        # Use Gemini model
+                        if "gemini" in self.model.lower():
+                            gemini_model = genai.GenerativeModel(self.model)
+                        else:
+                            gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                        
+                        # Combine system prompt and user prompt for Gemini
+                        enhanced_system_prompt = system_prompt or ""
+                        if company_data:
+                            company_name = company_data.get('company_name', 'this startup')
+                            enhanced_system_prompt += f"\n\nIMPORTANT: All responses must be personalized specifically for {company_name}. Use the company's specific details, industry, problem, solution, and context provided. Make responses relevant and tailored to this startup's unique situation."
+                        
+                        full_prompt = f"{enhanced_system_prompt}\n\n{personalized_prompt}" if enhanced_system_prompt else personalized_prompt
+                        
+                        logger.info("Using Gemini as fallback for OpenAI quota error")
+                        response = gemini_model.generate_content(
+                            full_prompt,
+                            generation_config={
+                                "temperature": self.temperature,
+                            }
+                        )
+                        return response.text
+                    except Exception as gemini_error:
+                        logger.error(f"Gemini fallback also failed: {gemini_error}")
+                        raise e  # Raise original OpenAI error
+                else:
+                    if not gemini_key:
+                        logger.warning("[!] GEMINI_API_KEY not found in environment. Cannot fallback to Gemini.")
+                        logger.info("[TIP] Add GEMINI_API_KEY to your .env file to enable automatic fallback.")
+                    if not gemini_imported:
+                        logger.warning("[!] google-generativeai not installed. Cannot fallback to Gemini.")
+                        logger.info("[TIP] Install with: pip install google-generativeai")
+                    # Re-raise the original error if fallback can't proceed
+                    logger.error(f"Error generating response: {e}")
+                    raise
+            else:
+                # Not a quota error or not in auto mode - just re-raise
+                logger.error(f"Error generating response: {e}")
+                raise
     
     def format_response(self, response: str, sources: List[Dict]) -> Dict:
         """

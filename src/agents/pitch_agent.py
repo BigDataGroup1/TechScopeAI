@@ -84,18 +84,102 @@ class PitchAgent(BaseAgent):
             "type": "textarea",
             "required": False,
             "placeholder": "What makes you different from competitors..."
+        },
+        {
+            "id": "company_stage",
+            "question": "📊 Is your company already operating or just an idea?",
+            "type": "select",
+            "options": ["Just an idea", "Early stage (prototype/MVP)", "Operating with customers", "Established business"],
+            "required": True,
+            "help": "This determines if we ask for financial data"
+        },
+        {
+            "id": "annual_revenue",
+            "question": "💰 Annual Revenue (if applicable)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $500K, $2M, Not applicable",
+            "conditional": {"company_stage": ["Operating with customers", "Established business"]}
+        },
+        {
+            "id": "ebitda",
+            "question": "📈 EBITDA (Earnings Before Interest, Taxes, Depreciation, Amortization)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $100K, -$50K, Not applicable",
+            "conditional": {"company_stage": ["Operating with customers", "Established business"]}
+        },
+        {
+            "id": "monthly_recurring_revenue",
+            "question": "🔄 Monthly Recurring Revenue (MRR) - if SaaS/subscription model",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $25K MRR, Not applicable"
+        },
+        {
+            "id": "customer_count",
+            "question": "👥 Number of customers/users",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., 500 customers, 10K users"
+        },
+        {
+            "id": "growth_rate",
+            "question": "📊 Monthly/Annual Growth Rate",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., 20% MoM, 150% YoY"
+        },
+        {
+            "id": "current_valuation",
+            "question": "💎 Current Company Valuation (if known)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $5M pre-money, Not set yet"
+        },
+        {
+            "id": "equity_offering",
+            "question": "📋 Equity % being offered in this round",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., 15%, 20%"
+        },
+        {
+            "id": "use_of_funds",
+            "question": "🎯 Use of Funds (how will you spend the investment?)",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "e.g., 40% product development, 30% marketing, 20% team, 10% operations"
+        },
+        {
+            "id": "projected_revenue",
+            "question": "🔮 Projected Revenue (12-24 months)",
+            "type": "text",
+            "required": False,
+            "placeholder": "e.g., $2M in 12 months, $5M in 24 months"
+        },
+        {
+            "id": "key_metrics",
+            "question": "📊 Key Metrics (CAC, LTV, Churn, etc.)",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "e.g., CAC: $50, LTV: $500, Churn: 5% monthly"
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Pitch Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("pitch", retriever, model=model)
+        # Use Gemini model if provider is Gemini
+        if ai_provider.lower() in ["gemini", "auto"]:
+            model = "gemini-2.0-flash"
+        super().__init__("pitch", retriever, model=model, ai_provider=ai_provider)
         logger.info("PitchAgent initialized")
     
     def generate_from_outline(self, outline: Dict, company_context: Optional[Dict] = None) -> Dict:
@@ -292,7 +376,7 @@ Be constructive, actionable, and specific. Reference the examples and best pract
             sources=all_sources
         )
     
-    def generate_slides(self, company_details: Dict) -> Dict:
+    def generate_slides(self, company_details: Dict, gamma_only: bool = False) -> Dict:
         """
         Generate structured pitch deck slides from company details.
         
@@ -375,6 +459,25 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
         
         # Extract company data for personalization
         company_data = self._extract_company_data(company_details)
+        
+        # 🆕 Check if AI provider is specified in company_data and switch if needed
+        ai_provider = company_data.get('ai_provider', '').lower() if company_data else ''
+        if ai_provider and ai_provider != self.ai_provider:
+            # Switch to the requested provider
+            if ai_provider in ["gemini", "auto"]:
+                try:
+                    import google.generativeai as genai
+                    import os
+                    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                    if gemini_key:
+                        genai.configure(api_key=gemini_key)
+                        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                        self.use_gemini = True
+                        self.ai_provider = ai_provider
+                        logger.info(f"✅ Switched to Gemini for slide generation")
+                except Exception as e:
+                    logger.warning(f"Could not switch to Gemini: {e}, using current provider")
+        
         # Generate response
         response_text = self.generate_response(prompt, system_prompt=system_prompt, company_data=company_data)
         
@@ -402,34 +505,39 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
                 "sources": all_sources
             }
             
-            # Fetch images for each slide and store in slide data
+            # Fetch images for each slide using MCP image_search tool
             try:
-                from ..utils.image_fetcher import ImageFetcher
-                image_fetcher = ImageFetcher()
-                
                 logger.info("Fetching images for slides...")
                 for slide in slides_result["slides"]:
                     slide_title = slide.get('title', '')
                     slide_content = slide.get('content', '')
                     
                     try:
-                        # Get keywords for image search
-                        keywords = image_fetcher.get_slide_keywords(slide_title, slide_content)
+                        # Extract keywords from slide
+                        keywords = self._extract_slide_keywords(slide_title, slide_content)
                         
-                        # Fetch image
-                        image_path = image_fetcher.get_image_for_slide(slide_title, slide_content, keywords)
+                        # Fetch image using MCP tool
+                        image_result = self.mcp_client.image_search(
+                            slide_title=slide_title,
+                            slide_content=slide_content,
+                            keywords=keywords
+                        )
                         
-                        if image_path and Path(image_path).exists():
-                            # Store absolute path for use in PPT and web
-                            slide["image_path"] = str(Path(image_path).absolute())
-                            logger.info(f"✅ Image fetched for slide: {slide_title}")
+                        if image_result.get("success") and image_result.get("image_path"):
+                            image_path = image_result["image_path"]
+                            if Path(image_path).exists():
+                                # Store absolute path for use in PPT and web
+                                slide["image_path"] = str(Path(image_path).absolute())
+                                logger.info(f"✅ Image fetched for slide: {slide_title}")
+                            else:
+                                slide["image_path"] = None
                         else:
                             slide["image_path"] = None
                     except Exception as e:
                         logger.warning(f"Could not fetch image for slide {slide.get('title', '')}: {e}")
                         slide["image_path"] = None
             except Exception as e:
-                logger.warning(f"Image fetcher not available: {e}")
+                logger.warning(f"Image search not available: {e}")
                 # Set image_path to None for all slides
                 for slide in slides_result["slides"]:
                     slide["image_path"] = None
@@ -441,20 +549,139 @@ Each slide should be clear, concise, and investor-focused. Use the company detai
                 if "talking_points" not in slide:
                     slide["talking_points"] = slide.get("key_points", [])
             
-            # Auto-generate PowerPoint if available
+            # Auto-generate PowerPoint if not in gamma_only mode
+            print(f"\n{'='*80}")
+            print(f"🔍 DEBUG: gamma_only = {gamma_only}")
+            print(f"{'='*80}\n")
+            logger.info(f"{'='*80}")
+            logger.info(f"🔍 DEBUG: gamma_only parameter = {gamma_only}")
+            logger.info(f"{'='*80}")
+            
+            if not gamma_only:
+                print("📊 Generating PowerPoint (normal mode)...")
+                logger.info("📊 Generating PowerPoint (normal mode)...")
+                try:
+                    from ..utils.exporters import PitchExporter
+                    exporter = PitchExporter()
+                    # Get AI enhancement preference from company_data (default: True)
+                    enhance_with_ai = company_details.get("enhance_with_ai", True)
+                    ai_provider = company_details.get("ai_provider", "auto")  # 🆕 Get AI provider preference
+                    # Pass company_data for financial charts and intelligent filtering
+                    pptx_path = exporter.export_to_powerpoint(
+                        slides_result["slides"],
+                        slides_result["company_name"],
+                        include_images=True,
+                        enhance_with_ai=enhance_with_ai,
+                        company_data=company_details,  # 🆕 Pass company data for charts/filtering
+                        full_rewrite=True,  # 🆕 Enable full AI rewrite
+                        ai_provider=ai_provider  # 🆕 Pass AI provider preference
+                    )
+                    if pptx_path:
+                        slides_result["pptx_path"] = pptx_path
+                        print(f"✅ PowerPoint generated: {pptx_path}")
+                        logger.info(f"Auto-generated PowerPoint: {pptx_path}")
+                except Exception as e:
+                    print(f"❌ PowerPoint generation failed: {e}")
+                    logger.error(f"Could not auto-generate PowerPoint: {e}", exc_info=True)
+                    # Store error info
+                    slides_result["pptx_error"] = str(e)
+            else:
+                print("⏭️ SKIPPING PowerPoint generation (gamma_only=True)")
+                logger.info("⏭️ SKIPPING PowerPoint generation (gamma_only=True)")
+                # Explicitly set pptx_path to None to prevent any fallback
+                slides_result["pptx_path"] = None
+                slides_result["pptx_skipped"] = True
+            
+            # Generate Gamma.ai presentation (ALWAYS generate, but especially important in gamma_only mode)
+            print(f"\n{'='*80}")
+            print(f"🚀 GAMMA GENERATION STARTED (gamma_only={gamma_only})")
+            print(f"{'='*80}\n")
+            logger.info(f"{'='*80}")
+            logger.info(f"🚀 GAMMA GENERATION STARTED (gamma_only={gamma_only})")
+            logger.info(f"{'='*80}")
             try:
-                from ..utils.exporters import PitchExporter
-                exporter = PitchExporter()
-                pptx_path = exporter.export_to_powerpoint(
+                from ..utils.gamma_integration import GammaIntegration
+                gamma = GammaIntegration()
+                
+                # Log API key status
+                if gamma.api_key:
+                    logger.info(f"✅ GAMMA_API_KEY found: {gamma.api_key[:10]}...")
+                else:
+                    logger.warning("⚠️ GAMMA_API_KEY NOT FOUND - Will run in demo mode")
+                
+                theme_id = company_details.get("gamma_theme", "startup-pitch")
+                enhance_with_ai = company_details.get("enhance_with_ai", True)
+                
+                logger.info(f"Creating Gamma presentation with:")
+                logger.info(f"  - Company: {slides_result['company_name']}")
+                logger.info(f"  - Slides: {len(slides_result['slides'])}")
+                logger.info(f"  - Theme: {theme_id}")
+                logger.info(f"  - Enhance with AI: {enhance_with_ai}")
+                
+                gamma_result = gamma.create_presentation(
                     slides_result["slides"],
                     slides_result["company_name"],
-                    include_images=True
+                    theme_id=theme_id,
+                    enhance_with_ai=enhance_with_ai
                 )
-                if pptx_path:
-                    slides_result["pptx_path"] = pptx_path
-                    logger.info(f"Auto-generated PowerPoint: {pptx_path}")
+                
+                slides_result["gamma_presentation"] = gamma_result
+                
+                logger.info(f"{'='*60}")
+                if gamma_result.get("success"):
+                    logger.info(f"✅ SUCCESS: Gamma presentation created!")
+                    logger.info(f"   URL: {gamma_result.get('presentation_url', 'N/A')}")
+                    logger.info(f"   Generation ID: {gamma_result.get('generation_id', 'N/A')}")
+                else:
+                    logger.error(f"❌ FAILED: Gamma presentation creation failed")
+                    logger.error(f"   Error: {gamma_result.get('error', 'Unknown')}")
+                    logger.error(f"   Message: {gamma_result.get('message', 'No message')}")
+                    if gamma_result.get('generation_id'):
+                        logger.info(f"   Generation ID: {gamma_result.get('generation_id')}")
+                logger.info(f"{'='*60}")
+                
             except Exception as e:
-                logger.warning(f"Could not auto-generate PowerPoint: {e}")
+                logger.error(f"{'='*60}")
+                logger.error(f"❌ EXCEPTION: Could not create Gamma presentation")
+                logger.error(f"   Error: {e}", exc_info=True)
+                logger.error(f"{'='*60}")
+                slides_result["gamma_presentation"] = {
+                    "success": False,
+                    "error": str(e),
+                    "message": f"Gamma generation failed: {e}",
+                    "exception_type": type(e).__name__
+                }
+            
+            # Canva integration commented out - requires OAuth 2.0 setup
+            # Uncomment and configure OAuth if needed
+            # try:
+            #     from ..utils.canva_integration import CanvaIntegration
+            #     canva = CanvaIntegration()
+            #     template_id = company_details.get("canva_template", "pitch-deck-modern")
+            #     enhance_visuals = company_details.get("enhance_with_ai", True)
+            #     canva_result = canva.create_presentation(
+            #         slides_result["slides"],
+            #         slides_result["company_name"],
+            #         template_id=template_id,
+            #         enhance_visuals=enhance_visuals
+            #     )
+            #     slides_result["canva_presentation"] = canva_result
+            #     if canva_result.get("success"):
+            #         logger.info(f"✅ Canva presentation created: {canva_result.get('design_url')}")
+            #     else:
+            #         logger.warning(f"Canva presentation creation failed: {canva_result.get('error', 'Unknown')}")
+            # except Exception as e:
+            #     logger.error(f"Could not create Canva presentation: {e}", exc_info=True)
+            #     slides_result["canva_presentation"] = {
+            #         "success": False,
+            #         "error": str(e),
+            #         "message": f"Canva generation failed: {e}"
+            #     }
+            slides_result["canva_presentation"] = {
+                "success": False,
+                "error": "Canva integration disabled",
+                "message": "Canva integration is currently disabled. It requires OAuth 2.0 setup."
+            }
             
             return slides_result
         except json.JSONDecodeError as e:
@@ -686,11 +913,26 @@ Be specific and constructive in your feedback."""
         # Retrieve relevant context
         context_data = self.retrieve_context(query, top_k=5)
         
+        # Use web search if RAG doesn't have enough results
+        web_results = []
+        if context_data.get('count', 0) < 3:
+            logger.info("RAG results insufficient, using web search fallback")
+            topic_context = f"{context.get('industry', '')} {context.get('company_stage', '')}" if context else query
+            search_result = self.mcp_client.web_search(
+                query=query,
+                topic_context=topic_context
+            )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
+        
         # Build prompt
         prompt = f"""User Question: {query}
 
 Relevant Context from Pitch Examples and Templates:
 {context_data.get('context', 'No relevant context found')}
+
+Web Search Results:
+{self._format_web_results(web_results) if web_results else 'No additional web results'}
 
 Please provide helpful advice about pitch decks based on the context above.
 If the user asks about their specific company, use the company context provided.
@@ -720,9 +962,20 @@ IMPORTANT - Ask for clarification and more details:
         
         response_text = self.generate_response(prompt, system_prompt=system_prompt)
         
+        # Combine sources from RAG and web search
+        all_sources = context_data.get('sources', [])
+        for web_result in web_results:
+            all_sources.append({
+                'source': web_result.get('url', 'Web Search'),
+                'title': web_result.get('title', ''),
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True  # Flag to identify web search sources
+            })
+        
         return self.format_response(
             response=response_text,
-            sources=context_data.get('sources', [])
+            sources=all_sources
         )
     
     def _analyze_structure(self, pitch_text: str) -> Dict:
@@ -839,4 +1092,244 @@ PITCH STRUCTURE ANALYSIS:
 Be constructive, actionable, and specific. Reference the examples and best practices above."""
         
         return prompt
+    
+    def _extract_slide_keywords(self, slide_title: str, slide_content: str) -> List[str]:
+        """Extract relevant keywords from slide for image search."""
+        keywords = []
+        
+        # Add title words (filtered)
+        title_words = slide_title.lower().split()
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "slide"}
+        keywords.extend([w for w in title_words if w not in stop_words and len(w) > 2])
+        
+        # Add content keywords (first few meaningful words)
+        content_words = slide_content.lower().split()[:10]
+        keywords.extend([w for w in content_words if w not in stop_words and len(w) > 3])
+        
+        # Map common pitch deck terms to image-friendly keywords
+        keyword_map = {
+            "problem": "business problem solution",
+            "solution": "innovation technology",
+            "market": "market growth chart",
+            "traction": "growth success metrics",
+            "team": "team collaboration",
+            "competition": "competition business",
+            "financial": "finance money growth",
+            "vision": "future vision",
+            "product": "product technology",
+            "revenue": "revenue growth chart"
+        }
+        
+        for key, mapped in keyword_map.items():
+            if key in slide_title.lower() or key in slide_content.lower():
+                keywords.append(mapped)
+        
+        # Return unique keywords, limit to 3
+        return list(dict.fromkeys(keywords))[:3]
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
+
+
+    
+    def _build_evaluation_prompt(self, pitch_text: str, structure: Dict,
+                                 similar_pitches: List[Dict], best_practices: List[Dict],
+                                 failure_lessons: List[Dict], company_context: Optional[Dict]) -> str:
+        """Build prompt for pitch evaluation."""
+        prompt = f"""Evaluate this pitch deck:
+
+PITCH TEXT:
+{pitch_text[:2000]}...  # Truncate if too long
+
+PITCH STRUCTURE ANALYSIS:
+{json.dumps(structure, indent=2)}
+
+"""
+        
+        if similar_pitches:
+            prompt += f"SIMILAR SUCCESSFUL PITCHES (for comparison):\n"
+            for i, pitch in enumerate(similar_pitches[:3], 1):
+                prompt += f"[{i}] {pitch.get('content', '')[:300]}...\n\n"
+        
+        if best_practices:
+            prompt += f"BEST PRACTICES:\n"
+            for i, practice in enumerate(best_practices[:3], 1):
+                prompt += f"[{i}] {practice.get('content', '')[:300]}...\n\n"
+        
+        if failure_lessons:
+            prompt += f"COMMON MISTAKES (from failures):\n"
+            for lesson in failure_lessons[:2]:
+                prompt += f"- {lesson.get('content', '')[:200]}...\n\n"
+        
+        if company_context:
+            prompt += f"COMPANY CONTEXT:\n{json.dumps(company_context, indent=2)}\n\n"
+        
+        prompt += """TASK: Provide a comprehensive evaluation:
+1. Overall score (1-10) with reasoning
+2. Strengths (what's working well)
+3. Weaknesses (what needs improvement)
+4. Specific improvement suggestions with examples
+5. Comparison to successful pitches
+
+Be constructive, actionable, and specific. Reference the examples and best practices above."""
+        
+        return prompt
+    
+    def _extract_slide_keywords(self, slide_title: str, slide_content: str) -> List[str]:
+        """Extract relevant keywords from slide for image search."""
+        keywords = []
+        
+        # Add title words (filtered)
+        title_words = slide_title.lower().split()
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "slide"}
+        keywords.extend([w for w in title_words if w not in stop_words and len(w) > 2])
+        
+        # Add content keywords (first few meaningful words)
+        content_words = slide_content.lower().split()[:10]
+        keywords.extend([w for w in content_words if w not in stop_words and len(w) > 3])
+        
+        # Map common pitch deck terms to image-friendly keywords
+        keyword_map = {
+            "problem": "business problem solution",
+            "solution": "innovation technology",
+            "market": "market growth chart",
+            "traction": "growth success metrics",
+            "team": "team collaboration",
+            "competition": "competition business",
+            "financial": "finance money growth",
+            "vision": "future vision",
+            "product": "product technology",
+            "revenue": "revenue growth chart"
+        }
+        
+        for key, mapped in keyword_map.items():
+            if key in slide_title.lower() or key in slide_content.lower():
+                keywords.append(mapped)
+        
+        # Return unique keywords, limit to 3
+        return list(dict.fromkeys(keywords))[:3]
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
+
+
+    
+    def _build_evaluation_prompt(self, pitch_text: str, structure: Dict,
+                                 similar_pitches: List[Dict], best_practices: List[Dict],
+                                 failure_lessons: List[Dict], company_context: Optional[Dict]) -> str:
+        """Build prompt for pitch evaluation."""
+        prompt = f"""Evaluate this pitch deck:
+
+PITCH TEXT:
+{pitch_text[:2000]}...  # Truncate if too long
+
+PITCH STRUCTURE ANALYSIS:
+{json.dumps(structure, indent=2)}
+
+"""
+        
+        if similar_pitches:
+            prompt += f"SIMILAR SUCCESSFUL PITCHES (for comparison):\n"
+            for i, pitch in enumerate(similar_pitches[:3], 1):
+                prompt += f"[{i}] {pitch.get('content', '')[:300]}...\n\n"
+        
+        if best_practices:
+            prompt += f"BEST PRACTICES:\n"
+            for i, practice in enumerate(best_practices[:3], 1):
+                prompt += f"[{i}] {practice.get('content', '')[:300]}...\n\n"
+        
+        if failure_lessons:
+            prompt += f"COMMON MISTAKES (from failures):\n"
+            for lesson in failure_lessons[:2]:
+                prompt += f"- {lesson.get('content', '')[:200]}...\n\n"
+        
+        if company_context:
+            prompt += f"COMPANY CONTEXT:\n{json.dumps(company_context, indent=2)}\n\n"
+        
+        prompt += """TASK: Provide a comprehensive evaluation:
+1. Overall score (1-10) with reasoning
+2. Strengths (what's working well)
+3. Weaknesses (what needs improvement)
+4. Specific improvement suggestions with examples
+5. Comparison to successful pitches
+
+Be constructive, actionable, and specific. Reference the examples and best practices above."""
+        
+        return prompt
+    
+    def _extract_slide_keywords(self, slide_title: str, slide_content: str) -> List[str]:
+        """Extract relevant keywords from slide for image search."""
+        keywords = []
+        
+        # Add title words (filtered)
+        title_words = slide_title.lower().split()
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "slide"}
+        keywords.extend([w for w in title_words if w not in stop_words and len(w) > 2])
+        
+        # Add content keywords (first few meaningful words)
+        content_words = slide_content.lower().split()[:10]
+        keywords.extend([w for w in content_words if w not in stop_words and len(w) > 3])
+        
+        # Map common pitch deck terms to image-friendly keywords
+        keyword_map = {
+            "problem": "business problem solution",
+            "solution": "innovation technology",
+            "market": "market growth chart",
+            "traction": "growth success metrics",
+            "team": "team collaboration",
+            "competition": "competition business",
+            "financial": "finance money growth",
+            "vision": "future vision",
+            "product": "product technology",
+            "revenue": "revenue growth chart"
+        }
+        
+        for key, mapped in keyword_map.items():
+            if key in slide_title.lower() or key in slide_content.lower():
+                keywords.append(mapped)
+        
+        # Return unique keywords, limit to 3
+        return list(dict.fromkeys(keywords))[:3]
+    
+    def _format_web_results(self, web_results: List[Dict]) -> str:
+        """Format web search results for prompt."""
+        if not web_results:
+            return ""
+        
+        formatted = []
+        for i, result in enumerate(web_results[:5], 1):
+            formatted.append(
+                f"[{i}] {result.get('title', 'No title')}\n"
+                f"   URL: {result.get('url', '')}\n"
+                f"   Snippet: {result.get('snippet', '')[:200]}...\n"
+                f"   Relevance: {result.get('relevance_score', 0):.2f}"
+            )
+        
+        return "\n\n".join(formatted)
 

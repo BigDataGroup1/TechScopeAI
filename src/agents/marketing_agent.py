@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .base_agent import BaseAgent
 from ..rag.retriever import Retriever
-from ..utils.web_search import WebSearcher
+# Web search now via MCP client in BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -127,16 +127,16 @@ class MarketingAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Marketing Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("marketing", retriever, model=model)
-        self.web_searcher = WebSearcher(max_results=5)
+        super().__init__("marketing", retriever, model=model, ai_provider=ai_provider)
         self.image_cache_dir = Path("exports/marketing_images")
         self.image_cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info("MarketingAgent initialized")
@@ -165,14 +165,16 @@ class MarketingAgent(BaseAgent):
             top_k=3  # Reduced for faster performance
         )
         
-        # Web search for best practices if needed
+        # Web search for best practices if needed via MCP
         web_results = []
         if marketing_data.get('count', 0) < 3:
             topic_context = f"{marketing_context.get('platform', '')} {marketing_context.get('content_style', '')}"
-            web_results = self.web_searcher.search(
-                f"Instagram marketing best practices {marketing_context.get('campaign_goal', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"Instagram marketing best practices {marketing_context.get('campaign_goal', '')}",
                 topic_context=topic_context
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         content_count = int(marketing_context.get('content_count', '1 post').split()[0])
         
@@ -252,7 +254,12 @@ When generating responses:
             if not image_description:
                 company_name = marketing_context.get('company_name', '')
                 # Check if this is for presentation/PPT (from context or platform)
-                is_for_presentation = marketing_context.get('platform', '').lower() in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+                # Handle platform as string or list (from multiselect)
+                platform_value = marketing_context.get('platform', '')
+                if isinstance(platform_value, list):
+                    platform_value = platform_value[0] if platform_value else ''
+                platform_str = str(platform_value).lower() if platform_value else ''
+                is_for_presentation = platform_str in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
                 if company_name:
                     if is_for_presentation:
                         image_description = f"Professional presentation image for {company_name}: {product_desc}, business presentation, corporate quality, clean and polished"
@@ -265,17 +272,28 @@ When generating responses:
                         image_description = f"{style} marketing image for {product_desc}, Instagram post, social media, modern design, professional"
             
             # Check if this is for presentation/PPT
-            is_for_presentation = marketing_context.get('platform', '').lower() in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
+            # Handle platform as string or list (from multiselect)
+            platform_value = marketing_context.get('platform', '')
+            if isinstance(platform_value, list):
+                platform_value = platform_value[0] if platform_value else ''
+            platform_str = str(platform_value).lower() if platform_value else ''
+            is_for_presentation = platform_str in ['presentation', 'ppt', 'powerpoint', 'pitch deck', 'slides']
             
             # Generate the image
             logger.info(f"Generating {'presentation' if is_for_presentation else 'Instagram'} image automatically for: {product_desc}")
             logger.info(f"Image description: {image_description}")
             
+            # Get image provider from marketing context (from user choice)
+            image_provider = marketing_context.get('image_provider', 'dalle').lower()
+            if image_provider not in ['dalle', 'gemini']:
+                image_provider = 'dalle'  # Default to DALL-E
+            
             image_result = self.generate_marketing_image(
                 product_description=product_desc,
                 style=style,
                 image_style_description=image_description,
-                for_presentation=is_for_presentation
+                for_presentation=is_for_presentation,
+                image_provider=image_provider
             )
             
             if image_result and image_result.get('success'):
@@ -292,7 +310,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         # Format base response
@@ -344,13 +364,15 @@ When generating responses:
             top_k=5
         )
         
-        # Web search if needed
+        # Web search if needed via MCP
         web_results = []
         if linkedin_data.get('count', 0) < 3:
-            web_results = self.web_searcher.search(
-                f"LinkedIn marketing best practices {marketing_context.get('campaign_goal', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"LinkedIn marketing best practices {marketing_context.get('campaign_goal', '')}",
                 topic_context=marketing_context.get('content_style', '')
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         content_count = int(marketing_context.get('content_count', '1 post').split()[0])
         
@@ -414,20 +436,28 @@ When generating responses:
     
     def generate_marketing_image(self, product_description: str, style: str, 
                                  image_style_description: Optional[str] = None,
-                                 for_presentation: bool = False) -> Dict:
+                                 for_presentation: bool = False,
+                                 image_provider: str = "dalle") -> Dict:
         """
-        Generate marketing image using DALL-E 3.
+        Generate marketing image using DALL-E 3 or Gemini.
         
         Args:
             product_description: Description of product/service
             style: Content style (quirky, professional, trendy)
             image_style_description: Optional additional style description
             for_presentation: If True, generate professional presentation-quality image for PPT
+            image_provider: Image generation provider ("dalle" or "gemini")
             
         Returns:
             Dictionary with image URL and path
         """
-        logger.info(f"Generating marketing image with style: {style}, for_presentation: {for_presentation}")
+        logger.info(f"Generating marketing image with style: {style}, provider: {image_provider}, for_presentation: {for_presentation}")
+        
+        # Use Gemini if requested
+        if image_provider.lower() == "gemini":
+            return self._generate_image_with_gemini(
+                product_description, style, image_style_description, for_presentation
+            )
         
         # Build image prompt based on style
         if for_presentation:
@@ -490,6 +520,88 @@ When generating responses:
                 "error": str(e),
                 "message": "Could not generate image. Try using stock images instead."
             }
+    
+    def _generate_image_with_gemini(self, product_description: str, style: str,
+                                    image_style_description: Optional[str] = None,
+                                    for_presentation: bool = False) -> Dict:
+        """
+        Generate marketing image using Gemini image generation API.
+        
+        Args:
+            product_description: Description of product/service
+            style: Content style (quirky, professional, trendy)
+            image_style_description: Optional additional style description
+            for_presentation: If True, generate professional presentation-quality image
+            
+        Returns:
+            Dictionary with image path and metadata
+        """
+        try:
+            from ..utils.gemini_image_generator import GeminiImageGenerator
+            
+            gemini_gen = GeminiImageGenerator()
+            if not gemini_gen.enabled:
+                logger.warning("Gemini image generation not available, falling back to DALL-E")
+                return self.generate_marketing_image(
+                    product_description, style, image_style_description, 
+                    for_presentation, image_provider="dalle"
+                )
+            
+            # Build image prompt (same as DALL-E version)
+            if for_presentation:
+                style_prompts = {
+                    "Quirky/Fun": "professional, clean, modern business presentation, corporate quality, polished, executive-ready, presentation slide background, high-end business aesthetic",
+                    "Professional": "professional, clean, modern, business-focused, high-quality, corporate presentation, executive-ready, polished, presentation slide background, sophisticated",
+                    "Trendy/Modern": "professional, modern, sleek, contemporary, business presentation quality, corporate aesthetic, polished, executive-ready, presentation slide background",
+                    "Mix of styles": "professional, clean, modern, business presentation, corporate quality, polished, executive-ready, balanced professional aesthetic"
+                }
+                presentation_suffix = ", presentation slide background, professional business image, corporate quality, suitable for PowerPoint presentation, clean and polished, no random elements, business-appropriate, executive presentation quality"
+            else:
+                style_prompts = {
+                    "Quirky/Fun": "quirky, fun, playful, colorful, eye-catching, social media friendly, Instagram-worthy",
+                    "Professional": "professional, clean, modern, business-focused, high-quality, LinkedIn-ready",
+                    "Trendy/Modern": "trendy, modern, sleek, contemporary, Instagram-worthy, viral potential, social media optimized",
+                    "Mix of styles": "balanced, engaging, modern, professional yet approachable, social media ready"
+                }
+                presentation_suffix = ", high quality, social media ready, optimized for Instagram and LinkedIn"
+            
+            style_prompt = style_prompts.get(style, "professional, modern, engaging")
+            
+            # Combine prompts
+            if image_style_description:
+                if for_presentation:
+                    image_style_description = image_style_description.replace("Instagram post", "professional presentation")
+                    image_style_description = image_style_description.replace("social media", "business presentation")
+                full_prompt = f"{image_style_description}, {style_prompt}, marketing image for: {product_description}{presentation_suffix}, 1024x1024, high resolution"
+            else:
+                full_prompt = f"{style_prompt} marketing image for: {product_description}{presentation_suffix}, 1024x1024, high resolution"
+            
+            # Generate image using Gemini's image API directly
+            image_path = gemini_gen._generate_with_gemini_image_api(full_prompt, slide_number=999)
+            
+            if image_path and Path(image_path).exists():
+                logger.info(f"✅ Generated marketing image with Gemini: {image_path}")
+                return {
+                    "success": True,
+                    "image_path": str(image_path),
+                    "image_url": None,  # Gemini returns file path, not URL
+                    "prompt_used": full_prompt,
+                    "provider": "gemini"
+                }
+            else:
+                logger.warning("Gemini image generation returned no image, falling back to DALL-E")
+                return self.generate_marketing_image(
+                    product_description, style, image_style_description,
+                    for_presentation, image_provider="dalle"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error generating image with Gemini: {e}", exc_info=True)
+            logger.info("Falling back to DALL-E image generation")
+            return self.generate_marketing_image(
+                product_description, style, image_style_description,
+                for_presentation, image_provider="dalle"
+            )
     
     def suggest_marketing_strategies(self, marketing_context: Dict) -> Dict:
         """
@@ -571,11 +683,14 @@ When generating responses:
         """
         logger.info(f"Checking marketing trends: {query}")
         
-        web_results = self.web_searcher.search(
-            query,
+        search_result = self.mcp_client.web_search(
+            query=query,
             topic_context="marketing trends social media",
             max_results=8
         )
+        web_results = []
+        if search_result.get("success"):
+            web_results = search_result.get("results", [])
         
         if not web_results:
             return "No recent trends found. Using general best practices."
@@ -659,10 +774,13 @@ When generating responses:
         if context_data.get('count', 0) < 3:
             logger.info("RAG results insufficient, using web search fallback")
             topic_context = f"{context.get('platform', '')} {context.get('content_style', '')}" if context else query
-            web_results = self.web_searcher.search(
-                query,
+            search_result = self.mcp_client.web_search(
+                query=query,
                 topic_context=topic_context
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""User Question: {query}
 

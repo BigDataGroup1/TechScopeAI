@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from .base_agent import BaseAgent
 from ..rag.retriever import Retriever
-from ..utils.web_search import WebSearcher
+# Web search now via MCP client in BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -167,16 +167,16 @@ class PolicyAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Policy Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("policy", retriever, model=model)
-        self.web_searcher = WebSearcher(max_results=5)
+        super().__init__("policy", retriever, model=model, ai_provider=ai_provider)
         logger.info("PolicyAgent initialized")
     
     def generate_privacy_policy(self, company_context: Dict) -> Dict:
@@ -201,10 +201,13 @@ class PolicyAgent(BaseAgent):
         web_results = []
         if policy_context.get('count', 0) < 3:
             topic_context = f"{company_context.get('industry', '')} {company_context.get('target_markets', [])}"
-            web_results = self.web_searcher.search(
-                f"privacy policy requirements {company_context.get('industry', '')} {company_context.get('compliance_requirements', [])}",
+            search_result = self.mcp_client.web_search(
+                query=f"privacy policy requirements {company_context.get('industry', '')} {company_context.get('compliance_requirements', [])}",
                 topic_context=topic_context
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""Generate a comprehensive Privacy Policy for this company:
 
@@ -256,7 +259,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -286,10 +291,13 @@ When generating responses:
         web_results = []
         if tos_context.get('count', 0) < 3:
             topic_context = f"{company_context.get('industry', '')} {company_context.get('business_model', '')}"
-            web_results = self.web_searcher.search(
-                f"terms of service template {company_context.get('business_model', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"terms of service template {company_context.get('business_model', '')}",
                 topic_context=topic_context
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""Generate comprehensive Terms of Service for this company:
 
@@ -342,7 +350,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -371,10 +381,13 @@ When generating responses:
         
         # Web search for latest requirements
         topic_context = f"{company_context.get('industry', '')} {company_context.get('target_markets', [])}"
-        web_results = self.web_searcher.search(
-            f"compliance requirements {company_context.get('industry', '')} {company_context.get('compliance_requirements', [])}",
+        search_result = self.mcp_client.web_search(
+            query=f"compliance requirements {company_context.get('industry', '')} {company_context.get('compliance_requirements', [])}",
             topic_context=topic_context
         )
+        web_results = []
+        if search_result.get("success"):
+            web_results = search_result.get("results", [])
         
         prompt = f"""Assess compliance requirements for this company:
 
@@ -422,7 +435,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -451,10 +466,13 @@ When generating responses:
         # Web search if needed
         web_results = []
         if hr_context.get('count', 0) < 3:
-            web_results = self.web_searcher.search(
-                f"employee handbook template startup {company_context.get('industry', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"employee handbook template startup {company_context.get('industry', '')}",
                 topic_context=company_context.get('industry', '')
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""Generate HR and employment policies for this company:
 
@@ -503,7 +521,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -530,10 +550,13 @@ When generating responses:
         if context_data.get('count', 0) < 3:
             logger.info("RAG results insufficient, using web search fallback")
             topic_context = f"{context.get('industry', '')} {context.get('business_model', '')}" if context else query
-            web_results = self.web_searcher.search(
-                query,
+            search_result = self.mcp_client.web_search(
+                query=query,
                 topic_context=topic_context
             )
+            web_results = []
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""User Question: {query}
 
@@ -576,7 +599,9 @@ IMPORTANT - Ask for clarification and more details:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(

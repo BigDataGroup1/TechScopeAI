@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from .base_agent import BaseAgent
 from ..rag.retriever import Retriever
-from ..utils.web_search import WebSearcher
+# Web search now via MCP client in BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -96,16 +96,16 @@ class PatentAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Patent Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("patent", retriever, model=model)
-        self.web_searcher = WebSearcher(max_results=5)
+        super().__init__("patent", retriever, model=model, ai_provider=ai_provider)
         logger.info("PatentAgent initialized")
     
     def search_patents(self, query: str, company_context: Optional[Dict] = None) -> Dict:
@@ -127,15 +127,18 @@ class PatentAgent(BaseAgent):
             top_k=5
         )
         
-        # If RAG doesn't have enough results, use web search
+        # If RAG doesn't have enough results, use patent search via MCP
         web_results = []
         if patent_data.get('count', 0) < 3:
-            logger.info("RAG results insufficient, using web search fallback")
+            logger.info("RAG results insufficient, using patent search fallback")
             topic_context = f"{company_context.get('industry', '')} {company_context.get('solution', '')}" if company_context else query
-            web_results = self.web_searcher.search(
-                f"patent {query} intellectual property",
-                topic_context=topic_context
+            patent_search_result = self.mcp_client.patent_search(
+                query=f"patent {query} intellectual property",
+                technology_description=topic_context,
+                company_context=company_context
             )
+            if patent_search_result.get("success"):
+                web_results = patent_search_result.get("results", [])
         
         # Build prompt
         prompt = f"""Search for existing patents related to this technology/idea:
@@ -183,7 +186,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -211,14 +216,16 @@ When generating responses:
             top_k=5
         )
         
-        # Web search if needed
+        # Web search if needed via MCP
         web_results = []
         if patent_context.get('count', 0) < 3:
             topic_context = f"{company_context.get('industry', '')} {invention_description}" if company_context else invention_description
-            web_results = self.web_searcher.search(
-                f"patentability requirements {invention_description}",
+            search_result = self.mcp_client.web_search(
+                query=f"patentability requirements {invention_description}",
                 topic_context=topic_context
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""Assess the patentability of this invention:
 
@@ -267,7 +274,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -293,14 +302,16 @@ When generating responses:
             top_k=5
         )
         
-        # Web search if needed
+        # Web search if needed via MCP
         web_results = []
         if strategy_context.get('count', 0) < 3:
             topic_context = f"{company_context.get('industry', '')} {company_context.get('solution', '')}"
-            web_results = self.web_searcher.search(
-                f"startup patent filing strategy {company_context.get('industry', '')}",
+            search_result = self.mcp_client.web_search(
+                query=f"startup patent filing strategy {company_context.get('industry', '')}",
                 topic_context=topic_context
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""Provide patent filing strategy for this startup:
 
@@ -344,7 +355,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -372,13 +385,16 @@ When generating responses:
             top_k=5
         )
         
-        # Always use web search for prior art (patent databases)
+        # Always use patent search for prior art (patent databases) via MCP
         topic_context = f"{company_context.get('industry', '')} {technology_description}" if company_context else technology_description
-        web_results = self.web_searcher.search(
-            f"patent {technology_description} prior art USPTO",
-            topic_context=topic_context,
-            max_results=10
+        patent_search_result = self.mcp_client.patent_search(
+            query=f"patent {technology_description} prior art USPTO",
+            technology_description=topic_context,
+            company_context=company_context
         )
+        web_results = []
+        if patent_search_result.get("success"):
+            web_results = patent_search_result.get("results", [])[:10]
         
         prompt = f"""Conduct a prior art search for this technology:
 
@@ -424,7 +440,9 @@ When generating responses:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(
@@ -446,15 +464,17 @@ When generating responses:
         # Try RAG first
         context_data = self.retrieve_context(query, top_k=5)
         
-        # Use web search if RAG doesn't have enough results
+        # Use web search if RAG doesn't have enough results via MCP
         web_results = []
         if context_data.get('count', 0) < 3:
             logger.info("RAG results insufficient, using web search fallback")
             topic_context = f"{context.get('industry', '')} {context.get('solution', '')}" if context else query
-            web_results = self.web_searcher.search(
-                query,
+            search_result = self.mcp_client.web_search(
+                query=query,
                 topic_context=topic_context
             )
+            if search_result.get("success"):
+                web_results = search_result.get("results", [])
         
         prompt = f"""User Question: {query}
 
@@ -497,7 +517,9 @@ IMPORTANT - Ask for clarification and more details:
             all_sources.append({
                 'source': web_result.get('url', 'Web Search'),
                 'title': web_result.get('title', ''),
-                'similarity': web_result.get('relevance_score', 0)
+                'snippet': web_result.get('snippet', ''),
+                'similarity': web_result.get('relevance_score', 0),
+                'is_web_search': True
             })
         
         return self.format_response(

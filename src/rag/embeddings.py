@@ -3,14 +3,24 @@ Embedding generation using sentence-transformers.
 
 Uses the all-MiniLM-L6-v2 model (384 dimensions) for fast, efficient embeddings.
 Supports both GPU and CPU with automatic fallback.
+
+Note: This module is optional when using Weaviate (which handles embeddings internally).
 """
 
 import logging
 from typing import List, Union, Optional
-from sentence_transformers import SentenceTransformer
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+ # Optional import - sentence-transformers not needed when using Weaviate
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None
+    logger.info("sentence-transformers not available - using Weaviate for embeddings")
 
 
 def detect_device(device_preference: Optional[str] = None) -> str:
