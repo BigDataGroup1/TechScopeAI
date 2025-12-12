@@ -61,7 +61,7 @@ TechScopeAI combines specialized knowledge, real-time data access, and multi-age
 |----------|------|
 | **Live Application** | [TechScopeAI Web App](https://techscopeai-web-541402991388.us-central1.run.app/) |
 | **Full demo video with explanation** | [Full Video](https://youtu.be/QxWz4NmnLkU) |
-| **Application demo video** | [Application demo]([https://youtu.be/QxWz4NmnLkU](https://youtu.be/DdfLardLPjM)) |
+| **Application demo video** | [Application demo](https://youtu.be/DdfLardLPjM) |
 | **GitHub Repository** | [BigDataGroup1/TechScopeAI](https://github.com/BigDataGroup1/TechScopeAI) |
 | **Google Codelab** | [Project Documentation](#) |
 | **Architecture Diagram** | [View on Eraser.io](https://app.eraser.io/workspace/oAEPgjs5TnrFlUA3olc2?origin=share) |
