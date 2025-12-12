@@ -87,7 +87,7 @@ TechScopeAI combines specialized knowledge, real-time data access, and multi-age
 
 ## 🏗️ Architecture Diagram
 
-![Architecture Diagram](architecture%20diagram.png)
+![Architecture Diagram](architecture%diagram-final.png)
 
 ---
 
