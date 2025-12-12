@@ -13,7 +13,7 @@
 
 ## 🌐 Live Demo
 
-### **[👉 Click Here to Try TechScopeAI](https://techscopeai-web-541402991388.us-central1.run.app/)**
+### 👉 https://techscopeai-web-541402991388.us-central1.run.app/
 
 No setup required - just open and use!
 
