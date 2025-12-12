@@ -1,9 +1,58 @@
-# TechScopeAI - Multi-Agent Intelligence Platform
-
-**Intelligent System for Technical Startup Founders**
+# TechScopeAI: Intelligent System for Technical Startup Founders
 
 A production-grade, cloud-native platform that combines RAG (Retrieval-Augmented Generation), multi-agent orchestration, and LLM failover to deliver comprehensive guidance for technical startup founders across pitch creation, competitive analysis, marketing, patents, policies, and team building.
 
+## What It Does
+
+TechScopeAI is an AI-powered platform that helps technical startup founders with essential tasks. Instead of generic AI responses, it uses a specialized knowledge base and multiple specialized agents to provide domain-specific, actionable guidance.
+
+## Key Components
+
+### 1. RAG (Retrieval-Augmented Generation) System
+- **Knowledge Base**: Curated datasets from Kaggle, HuggingFace, GitHub, and other sources
+- **Vector Search**: Uses Weaviate Cloud with HNSW indexing for fast similarity search
+- **Domain Expertise**: Separate knowledge bases for competitors, marketing, IP/legal, policies, team building, and pitch examples
+- **How it works**: Agents query the knowledge base before generating responses, ensuring answers are grounded in relevant startup knowledge
+
+### 2. Multi-Agent Orchestration
+- **Specialized Agents**: Each agent handles a specific domain:
+  - **Pitch Agent**: Creates pitch decks, elevator pitches, and presentation slides. Integrates with Gamma.ai to generate professional presentations with automatic image enhancement via MCP Image Search. Supports multiple themes (startup-pitch, venture-capital, minimalist, modern-tech, executive)
+  - **Competitive Agent**: Analyzes competitors and market positioning
+  - **Marketing Agent**: Generates marketing strategies and content
+  - **Patent Agent**: Conducts patent searches and IP analysis
+  - **Policy Agent**: Drafts privacy policies and legal documents
+  - **Team Agent**: Analyzes team needs and generates job descriptions
+- **Coordinator Agent**: Orchestrates multiple agents for complex tasks
+- **How it works**: Agents use RAG for context, MCP tools for external data, and LLMs for generation
+
+### 3. MCP (Model Context Protocol) Tools
+- **External Service Integration**: Connects agents to real-time data sources
+- **Available Tools**:
+  - **Web Search**: DuckDuckGo for real-time information
+  - **Image Search**: Pexels/Unsplash for professional images (used by Pitch Agent for Gamma presentations)
+  - **Patent Search**: USPTO database for IP research
+  - **Content Extraction**: Web page content extraction
+- **How it works**: Centralized tool server that agents call when they need external data, avoiding hardcoded API calls
+
+## What Founders Get
+
+- **Pitch Decks**: AI-generated pitch decks with professional visuals via Gamma.ai integration
+- **Competitive Analysis**: Market positioning and competitor insights
+- **Marketing Strategies**: Data-driven marketing recommendations
+- **IP Guidance**: Patent searches and intellectual property advice
+- **Legal Documents**: Privacy policies and compliance documents
+- **Team Planning**: Job descriptions and team structure recommendations
+
+
+## Key Features
+
+- ✅ **Domain-Specific Knowledge**: RAG system with startup-focused datasets
+- ✅ **Real-Time Data**: MCP tools for current information
+- ✅ **Multi-Agent System**: Specialized agents for different domains
+- ✅ **Production-Ready**: Cloud-native deployment with scalability
+- ✅ **Visual Outputs**: Gamma.ai integration for professional presentations with automatic image enhancement
+
+TechScopeAI combines specialized knowledge, real-time data access, and multi-agent orchestration to provide technical startup founders with actionable, domain-specific guidance across all critical business areas.
 ---
 
 ## 🌐 Live Demo
