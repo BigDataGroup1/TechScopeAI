@@ -112,8 +112,9 @@ TechScopeAI is an AI-powered platform that helps technical startup founders with
 ### Prerequisites
 
 - Python 3.10+
-- Node.js 18+
-- Git
+- React 
+- Weaviate Cloud
+- Google cloud service account
 
 ### Step 1: Clone Repository
 
