@@ -78,7 +78,10 @@ const MarketingPage: React.FC = () => {
     const r = res || result;
     if (r?.image_path) {
       const encoded = encodeURIComponent(r.image_path);
-      return `http://localhost:8000/api/marketing/image?path=${encoded}`;
+      // Get API base URL and ensure we have the correct base without /api suffix
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const baseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
+      return `${baseUrl}/api/marketing/image?path=${encoded}`;
     }
     return null;
   };

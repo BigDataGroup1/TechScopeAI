@@ -121,6 +121,12 @@ class Retriever:
                     url_parts = normalized_url.split(":")
                     host = url_parts[0]
                     
+                    # Clean API key - strip whitespace and newlines
+                    weaviate_api_key = weaviate_api_key.strip()
+                    
+                    # Log API key info for debugging (without revealing full key)
+                    logger.info(f"API key length: {len(weaviate_api_key)}, starts with: {weaviate_api_key[:10]}...")
+                    
                     # Try to use weaviate.auth if available
                     try:
                         auth_credentials = weaviate.auth.AuthApiKey(api_key=weaviate_api_key)
@@ -128,26 +134,54 @@ class Retriever:
                         # Fallback if auth module structure is different
                         auth_credentials = weaviate_api_key
                     
-                    headers = {}
-                    openai_key = os.getenv("OPENAI_API_KEY")
-                    if openai_key:
-                        headers["X-OpenAI-Api-Key"] = openai_key
+                    # Connection configuration with skip_init_checks to avoid gRPC issues
+                    connection_params = {
+                        "cluster_url": f"https://{host}",
+                        "auth_credentials": auth_credentials,
+                    }
                     
-                    # Use connect_to_weaviate_cloud instead of deprecated connect_to_wcs
+                    # Try multiple connection methods
+                    weaviate_client = None
+                    
+                    # Method 1: Try connect_to_weaviate_cloud with skip_init_checks
                     try:
                         weaviate_client = weaviate.connect_to_weaviate_cloud(
                             cluster_url=host,
                             auth_credentials=auth_credentials,
-                            headers=headers if headers else None
+                            skip_init_checks=True
                         )
-                    except AttributeError:
-                        # Fallback to deprecated method for older weaviate-client versions
-                        weaviate_client = weaviate.connect_to_wcs(
-                            cluster_url=host,
-                            auth_credentials=auth_credentials,
-                            headers=headers if headers else None
-                        )
-                    logger.info(f"✅ Connected to Weaviate Cloud at {host}")
+                        logger.info(f"✅ Connected to Weaviate Cloud at {host}")
+                    except (TypeError, Exception) as e1:
+                        logger.debug(f"Method 1 failed: {e1}")
+                        
+                        # Method 2: Try without skip_init_checks
+                        try:
+                            weaviate_client = weaviate.connect_to_weaviate_cloud(
+                                cluster_url=host,
+                                auth_credentials=auth_credentials
+                            )
+                            logger.info(f"✅ Connected to Weaviate Cloud at {host} (method 2)")
+                        except Exception as e2:
+                            logger.debug(f"Method 2 failed: {e2}")
+                            
+                            # Method 3: Try connect_to_custom (HTTP only, no gRPC)
+                            try:
+                                # Use port 8080 for HTTP and skip gRPC entirely
+                                weaviate_client = weaviate.connect_to_custom(
+                                    http_host=host,
+                                    http_port=443,
+                                    http_secure=True,
+                                    grpc_host=host,
+                                    grpc_port=50051,
+                                    grpc_secure=True,
+                                    auth_credentials=auth_credentials,
+                                    skip_init_checks=True
+                                )
+                                logger.info(f"✅ Connected to Weaviate Cloud at {host} (custom)")
+                            except Exception as e3:
+                                logger.warning(f"All connection methods failed: {e3}")
+                                raise e3
+                    
                 except Exception as e:
                     logger.warning(f"Failed to connect to Weaviate Cloud: {e}")
                     import traceback

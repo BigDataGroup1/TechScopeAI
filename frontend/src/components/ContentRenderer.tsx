@@ -90,12 +90,12 @@ const ContentRenderer: React.FC<ContentRendererProps> = ({ content, accentColor 
   // Split content into sections by numbered roles (e.g., "1. Role Name")
   const parseContent = () => {
     const lines = content.split('\n');
-    const elements: JSX.Element[] = [];
+    const elements: React.ReactElement[] = [];
     let currentSection: { title: string; content: string[] } | null = null;
     let introLines: string[] = [];
     let isInIntro = true;
 
-    lines.forEach((line, idx) => {
+    lines.forEach((line) => {
       const trimmed = line.trim();
       
       // Check for numbered section header (e.g., "1. Senior Machine Learning Engineer")
@@ -222,7 +222,7 @@ const ContentRenderer: React.FC<ContentRendererProps> = ({ content, accentColor 
 // Fallback simple renderer for non-structured content
 const renderSimple = (content: string, colors: typeof colorClasses.purple) => {
   const lines = content.split('\n');
-  const elements: JSX.Element[] = [];
+  const elements: React.ReactElement[] = [];
   let listItems: string[] = [];
   let listType: 'ul' | 'ol' | null = null;
 

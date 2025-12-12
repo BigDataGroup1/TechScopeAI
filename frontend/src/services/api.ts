@@ -62,7 +62,29 @@ export const authApi = {
     traction?: string;
     funding_goal?: string;
   }): Promise<SessionResponse> => {
-    const response = await api.post('/auth/register', data);
+    // Clean up data: convert empty strings to undefined for optional fields
+    const cleanedData: any = {
+      company_name: data.company_name.trim(),
+      industry: data.industry.trim(),
+      problem: data.problem.trim(),
+      solution: data.solution.trim(),
+    };
+    
+    // Only include optional fields if they have values
+    if (data.target_market?.trim()) {
+      cleanedData.target_market = data.target_market.trim();
+    }
+    if (data.current_stage) {
+      cleanedData.current_stage = data.current_stage;
+    }
+    if (data.traction?.trim()) {
+      cleanedData.traction = data.traction.trim();
+    }
+    if (data.funding_goal?.trim()) {
+      cleanedData.funding_goal = data.funding_goal.trim();
+    }
+    
+    const response = await api.post('/auth/register', cleanedData);
     return response.data;
   },
 

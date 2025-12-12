@@ -65,8 +65,11 @@ const PitchDeckPage: React.FC = () => {
       // Extract filename from path (e.g., "exports/Company_deck.pptx" -> "Company_deck.pptx")
       const filename = slidesResult.pptx_path.split('/').pop();
       const sessionId = localStorage.getItem('sessionId');
+      // Get API base URL and ensure we have the correct base without /api suffix
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+      const baseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
       
-      const response = await fetch(`http://localhost:8000/api/pitch/download/${filename}`, {
+      const response = await fetch(`${baseUrl}/api/pitch/download/${filename}`, {
         headers: {
           'X-Session-ID': sessionId || '',
         },

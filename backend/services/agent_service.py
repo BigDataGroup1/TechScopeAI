@@ -26,17 +26,43 @@ def _initialize_retriever():
         from src.rag.embedder import Embedder
         from src.rag.vector_store import VectorStore
         from src.rag.retriever import Retriever
+        import os
         
-        embedder = Embedder(use_openai=False)
-        embedding_model = embedder.get_embedding_model()
-        vector_store = VectorStore(embedding_model=embedding_model)
+        # Check if using Weaviate QueryAgent - if so, skip embedding model loading
+        use_weaviate = os.getenv("USE_WEAVIATE_QUERY_AGENT", "true").lower() in ("true", "1", "yes")
+        
+        if use_weaviate:
+            # For Weaviate QueryAgent, we don't need the embedding model
+            # Weaviate handles embeddings internally
+            logger.info("Using Weaviate QueryAgent - skipping embedding model and PostgreSQL")
+            embedder = None
+            embedding_model = None
+            vector_store = VectorStore(embedding_model=None, skip_connection=True)
+        else:
+            # For PostgreSQL RAG, need embedding model
+            embedder = Embedder(use_openai=False)
+            embedding_model = embedder.get_embedding_model()
+            vector_store = VectorStore(embedding_model=embedding_model)
+        
         _retriever = Retriever(vector_store=vector_store, embedder=embedder)
         
         logger.info("✅ Retriever initialized")
         return _retriever
     except Exception as e:
-        logger.error(f"❌ Failed to initialize retriever: {e}")
-        return None
+        logger.error(f"❌ Failed to initialize retriever: {e}", exc_info=True)
+        # Fallback: force Weaviate path to avoid HF downloads
+        try:
+            logger.warning("Attempting fallback retriever initialization (skip HF embeddings)...")
+            from src.rag.vector_store import VectorStore
+            from src.rag.retriever import Retriever
+            
+            vector_store = VectorStore(embedding_model=None, skip_connection=True)
+            _retriever = Retriever(vector_store=vector_store, embedder=None)
+            logger.info("✅ Fallback retriever initialized without embeddings (Weaviate only)")
+            return _retriever
+        except Exception as fallback_error:
+            logger.error(f"❌ Fallback retriever also failed: {fallback_error}")
+            return None
 
 
 def get_pitch_agent():

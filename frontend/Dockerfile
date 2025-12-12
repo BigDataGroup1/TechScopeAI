@@ -13,8 +13,10 @@ RUN npm ci
 COPY frontend/ ./
 
 # Build arguments for environment variables
+# Cloud Build uses _ prefix for substitutions, so handle both cases
+ARG _VITE_API_BASE_URL
 ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=${_VITE_API_BASE_URL:-${VITE_API_BASE_URL}}
 
 # Build the app
 RUN npm run build

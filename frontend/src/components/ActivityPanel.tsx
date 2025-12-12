@@ -135,7 +135,7 @@ const ActivityPanel: React.FC = () => {
     <div class="grid">
       <div class="info"><div class="label">Company</div><div class="value">${companyName}</div></div>
       <div class="info"><div class="label">Industry</div><div class="value">${company?.industry || 'Unknown'}</div></div>
-      <div class="info"><div class="label">Stage</div><div class="value">${company?.stage || 'N/A'}</div></div>
+      <div class="info"><div class="label">Stage</div><div class="value">${company?.current_stage || 'N/A'}</div></div>
       <div class="info"><div class="label">Traction</div><div class="value">${company?.traction || 'N/A'}</div></div>
       <div class="info"><div class="label">Funding Goal</div><div class="value">${company?.funding_goal || 'N/A'}</div></div>
     </div>
@@ -147,7 +147,7 @@ const ActivityPanel: React.FC = () => {
       <div class="label" style="margin-top:12px;">Target Market</div>
       <div class="content">${(company?.target_market || 'N/A').replace(/\\n/g, '<br/>')}</div>
       <div class="label" style="margin-top:12px;">Unique Value Proposition</div>
-      <div class="content">${(company?.unique_value || 'N/A').replace(/\\n/g, '<br/>')}</div>
+      <div class="content">${(company?.solution || 'N/A').replace(/\\n/g, '<br/>')}</div>
     </div>
   </div>
 

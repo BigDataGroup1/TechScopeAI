@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../store/AppContext';
 import { policyApi } from '../services/api';
-import { ArrowLeft, Shield, FileText, Copy, Check, Download } from 'lucide-react';
+import { ArrowLeft, Shield, FileText } from 'lucide-react';
 import ContentRenderer from '../components/ContentRenderer';
 
 const policyTypes = [
@@ -41,7 +41,6 @@ const PolicyPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
 
   const [formData, setFormData] = useState({
     policy_type: 'privacy',
@@ -88,25 +87,6 @@ const PolicyPage: React.FC = () => {
     }
   };
 
-  const copyToClipboard = () => {
-    if (result?.response) {
-      navigator.clipboard.writeText(result.response);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const downloadAsText = () => {
-    if (result?.response) {
-      const blob = new Blob([result.response], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${formData.policy_type}_policy_${company?.company_name || 'company'}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  };
 
   const toggleDataCollection = (item: string) => {
     setFormData(prev => ({
