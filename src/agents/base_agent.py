@@ -123,46 +123,9 @@ class BaseAgent(ABC):
         # Initialize MCP client for tools (web search, image search, etc.)
         self.mcp_client = MCPClient()
         
-        # Initialize PersonalizationAgent if available (for Weaviate Cloud)
+        # PersonalizationAgent disabled - uses gRPC which has issues with API key format
+        # Agents will work without personalization features
         self.personalization_agent = None
-        if PERSONALIZATION_AGENT_AVAILABLE:
-            try:
-                weaviate_url = os.getenv("WEAVIATE_URL", "http://localhost:8081")
-                is_local = "localhost" in weaviate_url or "127.0.0.1" in weaviate_url or not weaviate_url.startswith("https://")
-                
-                if not is_local:
-                    # Only use PersonalizationAgent with Weaviate Cloud
-                    try:
-                        # Connect to Weaviate (reuse retriever's connection if available)
-                        if hasattr(retriever, 'query_agent_retriever') and hasattr(retriever.query_agent_retriever, 'client'):
-                            weaviate_client = retriever.query_agent_retriever.client
-                        else:
-                            # Create new connection
-                            if weaviate_url.startswith("http://"):
-                                url_parts = weaviate_url.replace("http://", "").split(":")
-                                host = url_parts[0]
-                                port = int(url_parts[1]) if len(url_parts) > 1 else 8081
-                                weaviate_client = weaviate.connect_to_custom(
-                                    http_host=host, http_port=port, http_secure=False,
-                                    grpc_host=host, grpc_port=50051, grpc_secure=False
-                                )
-                            else:
-                                url_parts = weaviate_url.replace("https://", "").split(":")
-                                host = url_parts[0]
-                                port = int(url_parts[1]) if len(url_parts) > 1 else 443
-                                weaviate_client = weaviate.connect_to_custom(
-                                    http_host=host, http_port=port, http_secure=True,
-                                    grpc_host=host, grpc_port=50051, grpc_secure=True
-                                )
-                        
-                        self.personalization_agent = PersonalizationAgent(client=weaviate_client)
-                        logger.info(f"✅ PersonalizationAgent initialized for {category} agent")
-                    except Exception as e:
-                        logger.warning(f"Could not initialize PersonalizationAgent: {e}, will use company data for personalization")
-                else:
-                    logger.info(f"PersonalizationAgent requires Weaviate Cloud (local instance detected), will use company data for personalization")
-            except Exception as e:
-                logger.warning(f"PersonalizationAgent not available: {e}, will use company data for personalization")
         
         logger.info(f"Initialized {category} agent with model {model}")
     

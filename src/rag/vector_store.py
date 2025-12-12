@@ -4,6 +4,7 @@ PostgreSQL + pgvector vector store wrapper.
 Manages PostgreSQL database with pgvector extension for storing and querying embeddings.
 
 Defaults to Cloud SQL connection. Local connection only when explicitly requested.
+Note: PostgreSQL is optional - when using Weaviate, psycopg2 is not required.
 """
 
 import logging
@@ -11,13 +12,31 @@ import os
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
-import psycopg2
-from psycopg2.extras import execute_values, Json
-from psycopg2.pool import ThreadedConnectionPool
 import numpy as np
 
-from .embeddings import EmbeddingModel
-from .db_config import get_database_url
+# Optional PostgreSQL imports - not needed when using Weaviate
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values, Json
+    from psycopg2.pool import ThreadedConnectionPool
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    psycopg2 = None
+    execute_values = None
+    Json = None
+    ThreadedConnectionPool = None
+
+# Optional imports - may not be needed
+try:
+    from .embeddings import EmbeddingModel
+except ImportError:
+    EmbeddingModel = None
+
+try:
+    from .db_config import get_database_url
+except ImportError:
+    get_database_url = None
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +75,12 @@ class VectorStore:
         
         if skip_connection:
             logger.info("📦 VectorStore: Skipping PostgreSQL connection (Weaviate is primary)")
+            self.database_url = None
+            return
+        
+        # Check if PostgreSQL is available
+        if not POSTGRES_AVAILABLE:
+            logger.warning("📦 VectorStore: psycopg2 not installed, PostgreSQL not available")
             self.database_url = None
             return
         

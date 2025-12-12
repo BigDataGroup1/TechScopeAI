@@ -24,16 +24,16 @@ pydantic>=2.6.0
 python-multipart>=0.0.6
 
 # RAG & Vector Database
-sentence-transformers>=2.2.0  # FREE embeddings
-faiss-cpu>=1.7.4  # Vector database (local, free - fallback)
-weaviate-client[agents]>=4.0.0  # Weaviate with QueryAgent support
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+weaviate-client>=3.26.7,<4.0.0
 langchain>=0.1.0  # RAG framework
 langchain-openai>=0.0.5  # OpenAI integration for LangChain
 langchain-community>=0.0.20  # Community integrations
 
-# RAG infrastructure dependencies (from main)
+# RAG infrastructure dependencies
 psycopg2-binary>=2.9.9  # PostgreSQL adapter
-pgvector>=0.2.4  # pgvector extension (for vector operations)
+pgvector>=0.2.4  # pgvector extension
 tqdm>=4.65.0  # Progress bars
 
 # LLM APIs
@@ -41,21 +41,16 @@ openai>=1.0.0  # OpenAI API
 google-generativeai>=0.3.0  # Google Gemini API
 
 # Data Processing
-numpy>=1.24.0,<2.0  # Pin to NumPy 1.x for compatibility with PyTorch/sentence-transformers
+numpy>=1.24.0,<2.0  # Pin to NumPy 1.x for compatibility
 scikit-learn>=1.3.0  # For similarity search
 openpyxl>=3.1.2  # For reading XLSX files
 
-# Chat Interface
-streamlit>=1.28.0  # Web UI
-streamlit-chat>=0.1.1  # Chat components
-
 # Utilities
 tiktoken>=0.5.0  # Token counting
-ddgs>=0.1.0  # Web search (free, no API key needed) - renamed from duckduckgo-search
+ddgs>=0.1.0  # Web search
 
 # Export Dependencies
 reportlab>=4.0.0  # PDF export
 python-pptx>=0.6.21  # PowerPoint export
-Pillow>=10.0.0  # Image processing for PowerPoint
-matplotlib>=3.7.0  # Charts and graphs for financial data
-
+Pillow>=10.0.0  # Image processing
+matplotlib>=3.7.0  # Charts and graphs
