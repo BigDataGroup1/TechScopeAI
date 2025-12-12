@@ -46,7 +46,7 @@ TechScopeAI is an AI-powered platform that helps technical startup founders with
 
 
 
-##TechScopeAI combines specialized knowledge, real-time data access, and multi-agent orchestration to provide technical startup founders with actionable, domain-specific guidance across all critical business areas.
+TechScopeAI combines specialized knowledge, real-time data access, and multi-agent orchestration to provide technical startup founders with actionable, domain-specific guidance across all critical business areas.
 ---
 
 ## 🌐 Application link
