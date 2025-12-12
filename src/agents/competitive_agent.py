@@ -94,15 +94,16 @@ class CompetitiveAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Competitive Agent.
         
         Args:
             retriever: Retriever instance for RAG (should use "competitive" category)
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("competitive", retriever, model=model)
+        super().__init__("competitive", retriever, model=model, ai_provider=ai_provider)
         logger.info("CompetitiveAgent initialized")
     
     def analyze_competitors(self, company_details: Dict, competitors: Optional[List[Dict]] = None) -> Dict:

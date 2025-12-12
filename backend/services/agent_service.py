@@ -1,0 +1,186 @@
+"""
+Agent Service - Singleton pattern for loading and caching agents
+"""
+
+import os
+import logging
+from typing import Optional, Tuple, Dict, Any
+from functools import lru_cache
+
+logger = logging.getLogger(__name__)
+
+# Global agent instances (lazy loaded)
+_agents: Dict[str, Any] = {}
+_retriever = None
+_initialized = False
+
+
+def _initialize_retriever():
+    """Initialize the RAG retriever (shared across agents) - Weaviate only"""
+    global _retriever
+    
+    if _retriever is not None:
+        return _retriever
+    
+    try:
+        # Only import retriever - it handles Weaviate connection internally
+        from src.rag.retriever import Retriever
+        
+        # Create a minimal VectorStore stub (not used with Weaviate)
+        class MinimalVectorStore:
+            def __init__(self):
+                self.database_url = None
+                self.pool = None
+                self.embedding_model = None
+            
+            def query(self, *args, **kwargs):
+                return []  # Weaviate handles queries, not PostgreSQL
+            
+            def search(self, *args, **kwargs):
+                return []
+        
+        logger.info("Using Weaviate - skipping PostgreSQL and embedding model")
+        vector_store = MinimalVectorStore()
+        _retriever = Retriever(vector_store=vector_store, embedder=None)
+        
+        logger.info("✅ Retriever initialized (Weaviate mode)")
+        return _retriever
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize retriever: {e}", exc_info=True)
+        return None
+
+
+def get_pitch_agent():
+    """Get or create PitchAgent instance"""
+    if "pitch" not in _agents:
+        try:
+            from src.agents.pitch_agent import PitchAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                _agents["pitch"] = PitchAgent(retriever, ai_provider="auto")
+                logger.info("✅ PitchAgent initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to load PitchAgent: {e}")
+            return None
+    return _agents.get("pitch")
+
+
+def get_marketing_agent():
+    """Get or create MarketingAgent instance"""
+    if "marketing" not in _agents:
+        try:
+            from src.agents.marketing_agent import MarketingAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                _agents["marketing"] = MarketingAgent(retriever, ai_provider="auto")
+                logger.info("✅ MarketingAgent initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to load MarketingAgent: {e}")
+            return None
+    return _agents.get("marketing")
+
+
+def get_patent_agent():
+    """Get or create PatentAgent instance"""
+    if "patent" not in _agents:
+        try:
+            from src.agents.patent_agent import PatentAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                _agents["patent"] = PatentAgent(retriever, ai_provider="auto")
+                logger.info("✅ PatentAgent initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to load PatentAgent: {e}")
+            return None
+    return _agents.get("patent")
+
+
+def get_policy_agent():
+    """Get or create PolicyAgent instance"""
+    if "policy" not in _agents:
+        try:
+            from src.agents.policy_agent import PolicyAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                _agents["policy"] = PolicyAgent(retriever, ai_provider="auto")
+                logger.info("✅ PolicyAgent initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to load PolicyAgent: {e}")
+            return None
+    return _agents.get("policy")
+
+
+def get_team_agent():
+    """Get or create TeamAgent instance"""
+    if "team" not in _agents:
+        try:
+            from src.agents.team_agent import TeamAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                _agents["team"] = TeamAgent(retriever, ai_provider="auto")
+                logger.info("✅ TeamAgent initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to load TeamAgent: {e}")
+            return None
+    return _agents.get("team")
+
+
+def get_competitive_agent():
+    """Get or create CompetitiveAgent instance"""
+    if "competitive" not in _agents:
+        try:
+            from src.agents.competitive_agent import CompetitiveAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                _agents["competitive"] = CompetitiveAgent(retriever, ai_provider="auto")
+                logger.info("✅ CompetitiveAgent initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to load CompetitiveAgent: {e}")
+            return None
+    return _agents.get("competitive")
+
+
+def get_supervisor_agent():
+    """Get or create SupervisorAgent instance (for chat routing)"""
+    if "supervisor" not in _agents:
+        try:
+            from src.agents.supervisor_agent import SupervisorAgent
+            retriever = _initialize_retriever()
+            if retriever:
+                supervisor = SupervisorAgent(retriever)
+                
+                # Register all agents
+                pitch = get_pitch_agent()
+                if pitch:
+                    supervisor.register_agent("pitch", pitch)
+                
+                marketing = get_marketing_agent()
+                if marketing:
+                    supervisor.register_agent("marketing", marketing)
+                
+                patent = get_patent_agent()
+                if patent:
+                    supervisor.register_agent("patent", patent)
+                
+                policy = get_policy_agent()
+                if policy:
+                    supervisor.register_agent("policy", policy)
+                
+                team = get_team_agent()
+                if team:
+                    supervisor.register_agent("team", team)
+                
+                competitive = get_competitive_agent()
+                if competitive:
+                    supervisor.register_agent("competitive", competitive)
+                
+                _agents["supervisor"] = supervisor
+                logger.info("✅ SupervisorAgent initialized with all agents")
+        except Exception as e:
+            logger.error(f"❌ Failed to load SupervisorAgent: {e}")
+            return None
+    return _agents.get("supervisor")
+
+
+
+

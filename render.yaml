@@ -1,0 +1,30 @@
+# Render Blueprint - https://render.com/docs/blueprint-spec
+# Deploy by connecting your GitHub repo to Render
+
+services:
+  # Backend API
+  - type: web
+    name: techscopeai-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # Add these in Render dashboard (don't commit secrets!)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: USE_WEAVIATE_QUERY_AGENT
+        value: "true"
+      - key: WEAVIATE_URL
+        sync: false
+      - key: WEAVIATE_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+

@@ -96,15 +96,16 @@ class PatentAgent(BaseAgent):
         }
     ]
     
-    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, retriever: Retriever, model: str = "gpt-4-turbo-preview", ai_provider: str = "openai"):
         """
         Initialize Patent Agent.
         
         Args:
             retriever: Retriever instance for RAG
             model: LLM model name
+            ai_provider: AI provider to use ("openai", "gemini", or "auto")
         """
-        super().__init__("patent", retriever, model=model)
+        super().__init__("patent", retriever, model=model, ai_provider=ai_provider)
         logger.info("PatentAgent initialized")
     
     def search_patents(self, query: str, company_context: Optional[Dict] = None) -> Dict:

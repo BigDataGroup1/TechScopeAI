@@ -4,6 +4,7 @@ PostgreSQL + pgvector vector store wrapper.
 Manages PostgreSQL database with pgvector extension for storing and querying embeddings.
 
 Defaults to Cloud SQL connection. Local connection only when explicitly requested.
+Note: PostgreSQL is optional - when using Weaviate, psycopg2 is not required.
 """
 
 import logging
@@ -11,13 +12,31 @@ import os
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
-import psycopg2
-from psycopg2.extras import execute_values, Json
-from psycopg2.pool import ThreadedConnectionPool
 import numpy as np
 
-from .embeddings import EmbeddingModel
-from .db_config import get_database_url
+# Optional PostgreSQL imports - not needed when using Weaviate
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values, Json
+    from psycopg2.pool import ThreadedConnectionPool
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    psycopg2 = None
+    execute_values = None
+    Json = None
+    ThreadedConnectionPool = None
+
+# Optional imports - may not be needed
+try:
+    from .embeddings import EmbeddingModel
+except ImportError:
+    EmbeddingModel = None
+
+try:
+    from .db_config import get_database_url
+except ImportError:
+    get_database_url = None
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +49,8 @@ class VectorStore:
         database_url: Optional[str] = None,
         embedding_model: Optional[EmbeddingModel] = None,
         pool_size: int = 5,
-        use_local: bool = False
+        use_local: bool = False,
+        skip_connection: bool = None  # Auto-detect based on USE_WEAVIATE_QUERY_AGENT
     ):
         """
         Initialize the vector store.
@@ -42,31 +62,70 @@ class VectorStore:
             use_local: If True, use local PostgreSQL (localhost:5432). 
                       If False (default), use Cloud SQL via CLOUD_SQL_PASSWORD.
                       Ignored if database_url is provided.
+            skip_connection: If True, skip PostgreSQL connection entirely.
+                           If None (default), auto-detect based on USE_WEAVIATE_QUERY_AGENT env var.
         """
         self.embedding_model = embedding_model
+        self.pool = None
+        
+        # Auto-detect: skip PostgreSQL if Weaviate QueryAgent is enabled
+        if skip_connection is None:
+            use_weaviate = os.getenv("USE_WEAVIATE_QUERY_AGENT", "false").lower() in ("true", "1", "yes")
+            skip_connection = use_weaviate
+        
+        if skip_connection:
+            logger.info("📦 VectorStore: Skipping PostgreSQL connection (Weaviate is primary)")
+            self.database_url = None
+            return
+        
+        # Check if PostgreSQL is available
+        if not POSTGRES_AVAILABLE:
+            logger.warning("📦 VectorStore: psycopg2 not installed, PostgreSQL not available")
+            self.database_url = None
+            return
         
         # Get database URL - defaults to Cloud SQL unless use_local=True
         self.database_url = get_database_url(use_local=use_local, database_url=database_url)
         
         # Initialize connection pool
         try:
+            # Test connection first with a simple connection (reduced timeout)
+            test_conn = psycopg2.connect(self.database_url, connect_timeout=2)
+            test_conn.close()
+            
+            # If test succeeds, create pool
             self.pool = ThreadedConnectionPool(1, pool_size, dsn=self.database_url)
-            logger.info(f"PostgreSQL connected: {self.database_url.split('@')[-1] if '@' in self.database_url else 'local'}")
+            logger.info(f"✅ PostgreSQL connected: {self.database_url.split('@')[-1] if '@' in self.database_url else 'local'}")
             
             # Ensure pgvector extension is enabled
             self._ensure_pgvector_extension()
             
+        except psycopg2.OperationalError as e:
+            error_msg = str(e)
+            logger.warning(f"⚠️  Failed to connect to PostgreSQL: {error_msg}")
+            if "Connection refused" in error_msg:
+                logger.warning("💡 Cloud SQL Proxy might not be running. Start it with: ./start_proxy_simple.sh")
+            elif "server closed the connection" in error_msg:
+                logger.warning("💡 Cloud SQL Proxy might have crashed. Check proxy terminal and restart it.")
+            logger.warning("VectorStore will work in limited mode. Some features may not be available.")
+            # Don't raise - allow graceful degradation
+            self.pool = None
         except Exception as e:
-            logger.error(f"Failed to connect to PostgreSQL: {e}")
-            logger.error("Make sure PostgreSQL is running and pgvector extension is installed.")
-            raise
+            logger.warning(f"⚠️  Failed to connect to PostgreSQL: {e}")
+            logger.warning("VectorStore will work in limited mode. Some features may not be available.")
+            # Don't raise - allow graceful degradation
+            self.pool = None
     
     def _get_connection(self):
         """Get a connection from the pool."""
+        if self.pool is None:
+            raise ConnectionError("PostgreSQL connection pool not initialized. Database may not be available.")
         return self.pool.getconn()
     
     def _put_connection(self, conn):
         """Return a connection to the pool."""
+        if self.pool is None:
+            return
         self.pool.putconn(conn)
     
     def _ensure_pgvector_extension(self):
@@ -274,14 +333,31 @@ class VectorStore:
         try:
             # Get query vector
             if query_embeddings is not None:
-                query_vector = query_embeddings[0]  # Use first embedding
+                query_vector = query_embeddings[0] if isinstance(query_embeddings, list) else query_embeddings
+                # Ensure it's a flat list of floats
+                if isinstance(query_vector, list) and len(query_vector) > 0:
+                    # Check if it's nested (list of lists)
+                    if isinstance(query_vector[0], list):
+                        query_vector = query_vector[0]  # Unwrap nested list
+                    # Ensure all elements are floats
+                    query_vector = [float(x) for x in query_vector]
+                elif isinstance(query_vector, np.ndarray):
+                    query_vector = query_vector.flatten().tolist()
             elif query_texts is not None and self.embedding_model is not None:
                 # Generate embedding for query
                 query_embedding = self.embedding_model.encode(query_texts[0])
                 if isinstance(query_embedding, np.ndarray):
-                    query_vector = query_embedding.tolist()
+                    query_vector = query_embedding.flatten().tolist()
+                elif isinstance(query_embedding, list):
+                    # Ensure it's a flat list
+                    if len(query_embedding) > 0 and isinstance(query_embedding[0], list):
+                        query_vector = query_embedding[0]
+                    else:
+                        query_vector = query_embedding
+                    # Ensure all elements are floats
+                    query_vector = [float(x) for x in query_vector]
                 else:
-                    query_vector = query_embedding
+                    query_vector = [float(query_embedding)]
             else:
                 raise ValueError("Either query_texts (with embedding_model) or query_embeddings must be provided")
             
@@ -319,6 +395,16 @@ class VectorStore:
                 with conn.cursor() as cur:
                     # Use cosine distance (1 - cosine similarity)
                     # ORDER BY embedding <=> %s uses cosine distance operator
+                    # Format vector properly for pgvector: convert list to string format '[0.1,0.2,0.3]'
+                    if isinstance(query_vector, list):
+                        # Convert list to pgvector format: '[0.1,0.2,0.3]' (no spaces, no nested brackets)
+                        vector_str = '[' + ','.join(str(float(x)) for x in query_vector) + ']'
+                    elif isinstance(query_vector, np.ndarray):
+                        vector_str = '[' + ','.join(str(float(x)) for x in query_vector.flatten()) + ']'
+                    else:
+                        # If already a string, try to parse and reformat
+                        vector_str = str(query_vector).replace(' ', '').replace('[[', '[').replace(']]', ']')
+                    
                     query = f"""
                         SELECT 
                             chunk_id,
@@ -331,7 +417,7 @@ class VectorStore:
                         LIMIT %s
                     """
                     
-                    params = [str(query_vector), str(query_vector), n_results] + where_params
+                    params = [vector_str, vector_str, n_results] + where_params
                     cur.execute(query, params)
                     
                     results_data = cur.fetchall()
